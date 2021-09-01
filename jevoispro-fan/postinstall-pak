@@ -1,0 +1,30 @@
+#!/bin/bash
+
+cat <<-EOF > /lib/systemd/system/jevoispro-fan.service
+[Unit]
+Description=JeVois-Pro Fan Controller
+Documentation=http://jevois.org
+
+[Service]
+Type=simple
+
+# you can specify options to jevoispro-fan:
+# -p <period> (in nanoseconds, default 100000, i.e., 10kHz frequency)
+# -d <duty_min> (in percent, default 4.3, should be between 0 and 100)
+# -D <duty_max> (in percent, default 100.0, should be between 0 and 100, and strictly larger than duty_min)
+# -t <temp_min> (in degrees, default 65C)
+# -T <temp_max> (in degrees, default 85C)
+#
+# Fan will operate at duty_min duty cycle below temp_min, and at duty_max above temp_max.
+ExecStart=/sbin/jevoispro-fan
+
+Restart=on-failure
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=sysinit.target
+EOF
+
+systemctl enable jevoispro-fan
+
+systemctl start jevoispro-fan
