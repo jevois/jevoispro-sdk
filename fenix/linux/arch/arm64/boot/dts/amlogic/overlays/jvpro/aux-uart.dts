@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+
+// JeVois-pro overlay to enable UART interface on AUX connector
+//
+// AUX pin 3 = uart_c RX
+// AUX pin 4 = uart_c TX
+
+/ {
+	fragment@0 {
+		target = <&uart_C>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

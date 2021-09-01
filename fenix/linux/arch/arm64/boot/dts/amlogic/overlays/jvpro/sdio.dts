@@ -1,0 +1,16 @@
+/dts-v1/;
+/plugin/;
+
+// JeVois-pro overlay to enable SDIO on M.2 PCIe connector 
+//
+// Use with SDIO wifi cards and others.
+
+/ {
+	fragment@0 {
+		target = <&sd_emmc_a>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

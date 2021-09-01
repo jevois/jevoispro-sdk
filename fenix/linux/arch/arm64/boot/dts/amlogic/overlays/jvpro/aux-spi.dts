@@ -1,0 +1,35 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable SPI on the AUX connector
+//
+// Enables spicc1 (uses GPIOH_4-7, defined as spicc1_pins in mesong12b.dtsi)
+// On the AUX connector: pin 1 = MOSI, pin 2 = MISO, pin 3 = SS, pin 4 = SCLK, voltage level selected by pin 7.
+//
+// When not enabled, AUX pin 1 is GPIOH_4, AUX pin 2 is GPIOH_5, AUX pin 3 is GPIOH_6, AUX pin 4 is GPIOH_7,
+// available as general GPIO pins. When enabled, these pins cannot be used as general GPIO anymore as they are
+// claimed for SPI.
+//
+
+/ {
+	fragment@0 {
+		target = <&spicc1>;
+
+		__overlay__ {
+			status = "okay";
+            
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+            // Generic SPI driver:
+	        spidev@0 {
+		        status = "okay";
+		        compatible = "linux,spidev";
+		        spi-max-frequency = <100000000>; // spi default max clock 100Mhz
+		        reg = <0>;
+	        };
+
+		};
+	};
+};

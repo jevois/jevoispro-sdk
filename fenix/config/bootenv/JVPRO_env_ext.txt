@@ -1,0 +1,24 @@
+# Maximum CPU Frequency of Little Core A53
+# 500/667/1000/1200/1398/1512/1608/1704/1800(default)/1908/2016/2100/2208
+max_freq_a53=1800
+
+# Maximum CPU Frequency of Big Core A73
+# 500/667/1000/1200/1398/1512/1608/1704/1800/1908/2016/2100/2208(default)/2304/2400
+max_freq_a73=2208
+
+# Device Tree Overlays
+#
+# aux-i2c           -- Enable I2C driver on AUX pins 5 (SDA) and 6 (SCL).
+# aux-onewire       -- Enable OneWire driver on AUX pin 3.
+# aux-spi           -- Enable SPI driver on AUX pins 1 (MOSI), 2 (MISO), 3 (SS), 4 (SCLK).
+# aux-uart          -- Enable UART driver on AUX pins 3 (RX), 4 (TX).
+# icm20948          -- Enable ICM-20948 IMU (present on IMX290 camera board) on JeVois M.2 sensor.
+# imx290            -- Enable Sony IMX290 camera sensor on JeVois M.2 sensor.
+# wifi-bt           -- Enable WIFI/BT M.2 PCIe card, instead of default Myriad-X or Coral-TPU M.2 PCIe card.
+# emmc              -- Enable custom eMMC, only for JeVois dual-TPU + eMMC board.
+# sdio              -- Enable SDIO function on M.2 PCIe port, use with SDIO wifi cards and others.
+# wdt               -- Enable watchdog timer.
+# remote            -- Enable infrared remote input (available on test pad on JeVois-Pro main board).
+
+overlays=icm20948 imx290
+

@@ -1,0 +1,114 @@
+#!/bin/bash
+
+. /etc/fenix-release
+
+for arg in $(cat /proc/cmdline); do
+	case $arg in
+		board_type=*)
+			board_type="${arg#*=}"
+			;;
+		board_type_name=*)
+			board_type_name="${arg#*=}"
+			;;
+		save_ethmac=*)
+			save_ethmac="${arg#*=}"
+			;;
+		mac=*)
+			ethmac="${arg#*=}"
+			;;
+		hwver=*)
+			hwver="${arg#*=}"
+			;;
+		reboot_mode=*)
+			reboot_mode="${arg#*=}"
+			;;
+	esac
+done
+
+# For VIMs
+model=$(tr -d '\0' </proc/device-tree/model)
+if [ "$model" == "Khadas VIM" ]; then
+	board_type_name="VIM1"
+elif [ "$model" == "Khadas VIM2" ]; then
+	board_type_name="VIM2"
+elif [ "$model" == "Khadas VIM3" ]; then
+	board_type_name="VIM3"
+elif [ "$model" == "JeVois Pro" ]; then
+	board_type_name="JVPRO"
+elif [ "$model" == "Khadas VIM3L" ]; then
+	board_type_name="VIM3L"
+fi
+
+if [[ -n $board_type_name && $BOARD != $board_type_name ]]; then
+	echo "update fenix-release..."
+	sed -i "s/BOARD=.*/BOARD=$board_type_name/" /etc/fenix-release
+fi
+
+# Save default mac address
+if [ "$save_ethmac" == "yes" ]; then
+	if grep custom_ethmac -q /boot/env.txt; then
+		custom_ethmac=$(cat /boot/env.txt | grep custom_ethmac | awk -F "=" '{print $2}')
+		if [ "$ethmac" != "$custom_ethmac" -a "X$ethmac" != "X" ]; then
+			sed -i "s/custom_ethmac=.*/custom_ethmac=$ethmac/" /boot/env.txt
+		fi
+	else
+		echo "custom_ethmac=$ethmac" >> /boot/env.txt
+	fi
+
+	fw_setenv save_ethmac "no"
+	fw_setenv ethaddr $ethmac
+	sync
+fi
+
+# Update Wi-Fi/BT firmware for VIM2 V14 AP6398S
+if [ "$hwver" == "VIM2.V14" ]; then
+	if [ ! -f /etc/.wifi-fixed ]; then
+		echo "Update VIM2.V14 Wi-Fi/BT firmware..."
+		## Wi-Fi firmware
+		mv /lib/firmware/brcm/fw_bcm4359c0_ag_apsta_ap6398s.bin /lib/firmware/brcm/fw_bcm4359c0_ag_apsta.bin
+		mv /lib/firmware/brcm/fw_bcm4359c0_ag_ap6398s.bin /lib/firmware/brcm/fw_bcm4359c0_ag.bin
+#		mv /lib/firmware/brcm/nvram_ap6398s.txt /lib/firmware/brcm/nvram_ap6359sa.txt
+
+		mv /lib/firmware/brcm/brcmfmac4359-sdio_ap6398s.bin /lib/firmware/brcm/brcmfmac4359-sdio.bin
+		mv /lib/firmware/brcm/brcmfmac4359-sdio_ap6398s.txt /lib/firmware/brcm/brcmfmac4359-sdio.txt
+
+		## Bluetooth firmware
+		cp /lib/firmware/brcm/BCM4359C0_ap6398s.hcd /lib/firmware/brcm/BCM4359C0.hcd
+
+		touch /etc/.wifi-fixed
+	fi
+
+elif [ "$hwver" == "VIM2.V12" ]; then
+	# Delete unused bluetooth firmware for VIM2 with AP6356SA
+	if [ -f /lib/firmware/brcm/BCM4359C0_ap6398s.hcd ]; then
+		rm /lib/firmware/brcm/BCM4359C0_ap6398s.hcd
+	fi
+	if [ ! -f /etc/.wifi-fixed ]; then
+		mv /lib/firmware/brcm/nvram_ap6359sa.txt /lib/firmware/brcm/nvram_ap6398s.txt
+		touch /etc/.wifi-fixed
+	fi
+fi
+
+# Cleanup dtb upgrading mark
+if [ "$reboot_mode" == "dtb_updated" ]; then
+	echo "cleanup dtb mark...."
+	if [ -f /boot/.DTB-NEED-UPDATE ]; then
+		rm -rf /boot/.DTB-NEED-UPDATE
+	fi
+fi
+
+# Update source list
+# JEVOIS: disable this
+if [ "$board_type_name" != "JVPRO" ]; then
+if [ "$VENDOR" != "Rockchip" ]; then
+	source_list_board=`cat /etc/apt/sources.list.d/fenix.list | awk '{print $2}' | awk -F "/" '{print $5}'`
+	if [ "$source_list_board" != "${board_type_name,,}" ]; then
+		echo "update source list from '$source_list_board' to '${board_type_name,,}'..."
+		sed -i "s/$source_list_board/${board_type_name,,}/" /etc/apt/sources.list.d/fenix.list
+	fi
+fi
+fi
+
+sync
+
+exit 0

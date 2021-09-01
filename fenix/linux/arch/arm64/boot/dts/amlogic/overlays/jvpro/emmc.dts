@@ -1,0 +1,16 @@
+/dts-v1/;
+/plugin/;
+
+// JeVois-pro overlay to enable custom eMMC pinout on M.2 PCIe connector 
+//
+// Only use with JeVois-Pro dual-TPU + eMMC card!
+
+/ {
+	fragment@0 {
+		target = <&sd_emmc_c>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

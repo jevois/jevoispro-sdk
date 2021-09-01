@@ -1,0 +1,14 @@
+/dts-v1/;
+/plugin/;
+
+// JeVois-pro overlay to enable watchdog timer
+
+/ {
+	fragment@0 {
+		target = <&wdt>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

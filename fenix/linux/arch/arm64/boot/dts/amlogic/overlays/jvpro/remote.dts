@@ -1,0 +1,15 @@
+/dts-v1/;
+/plugin/;
+
+// JeVois-pro overlay to enable remote IR input. It it accessible on the JeVois-Pro main board on a test pad labeled
+// IR. Note that some additional electronics are required.
+
+/ {
+	fragment@0 {
+		target = <&remote>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

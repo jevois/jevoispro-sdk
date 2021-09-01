@@ -1,0 +1,631 @@
+#!/bin/bash
+# Functions:
+# error_msg
+# warning_msg
+# info_msg
+# time_cal
+# prepare_host
+# mount_chroot
+# umount_chroot
+# install_deb_chroot
+# do_umount
+# cleanup
+# check_loop_device
+# prepare_toolchains
+# prepare_packages
+# get_package_list_hash
+# create_sources_list
+# compress_image
+# check_make_params
+# get_available_make_params
+# post_create_image
+# download_rootfs_cache
+
+## Print error message
+## $1 - message
+
+error_msg() {
+	local _FILE=${BASH_SOURCE[1]}
+	local _LINE=${BASH_LINENO[0]}
+
+	echo -e "$_FILE:$_LINE" $ERROR "$1"
+}
+
+## Print warning message
+## $1 - message
+warning_msg() {
+	local _FILE=${BASH_SOURCE[1]}
+	local _LINE=${BASH_LINENO[0]}
+	local _FUNC=${FUNCNAME[1]}
+
+    echo -e "$_FILE:$_FUNC:$_LINE" $WARNING "$1"
+}
+
+## Print information message
+## $1 - message
+info_msg() {
+	echo -e $INFO "$1"
+}
+
+## Calculate time
+## $1 - time in seconds
+time_cal() {
+	local minutes
+
+	minutes=$(($1 / 60))
+
+	echo "Time elapsed: $minutes minute(s)."
+}
+
+## Prepare host
+## Install essential packages
+prepare_host() {
+
+	if [[ $(dpkg --print-architecture) != "amd64" ]]; then
+		error_msg "Your build host architecture is not supported,please use a 'x86-x64' build host."
+		return -1
+	fi
+
+	local build_host=$(lsb_release -sc)
+	info_msg "Build host: $build_host"
+
+	if [[ -z "$build_host" || "bionic focal" != *"$build_host"* ]]; then
+		error_msg "Your build host is not supported! Please use 'Ubuntu bionic(18.04)/focal(20.04)' as your build host or try to build in Docker."
+		return -1
+	fi
+
+	case $DISTRIB_RELEASE in
+		bionic)
+			if [ "$build_host" != "focal" -a "$build_host" != "bionic" ]; then
+				error_msg "Building Ubuntu Bionic(18.04) images requires a Ubuntu Bionic(18.04)/Focal(20.04) build host, please upgrade your build host or try to build in Docker."
+				return -1
+			fi
+		;;
+		buster|focal)
+			if [ "$build_host" != "focal" ]; then
+				error_msg "Building Debian Buster(10)/Ubuntu Focal(20.04) images requires a Ubuntu Focal(20.04) build host, please upgrade your build host or try to build in Docker."
+				return -1
+			fi
+		;;
+	esac
+
+	grep -q i386 <(dpkg --print-foreign-architectures) || (warning_msg "Requires root privileges, please enter your passowrd!" && sudo dpkg --add-architecture i386)
+	if systemd-detect-virt -q -c; then
+		info_msg "Running in container: $(systemd-detect-virt)"
+		# disable apt-cacher unless NO_APT_CACHER=no is not specified explicitly
+		if [[ $NO_APT_CACHER != no ]]; then
+			info_msg "apt-cacher is disabled in containers."
+			NO_APT_CACHER=yes
+		fi
+		CONTAINER_COMPAT="yes"
+		export CONTAINER_COMPAT
+		export NO_APT_CACHER
+
+		if [ $(systemd-detect-virt) == docker ]; then
+			if [ -d ~/toolchains -a ! -d ~/fenix/downloads ]; then
+				info_msg "Copying preinstalled toolchains ..."
+				mkdir -p ~/fenix/downloads
+				cp -r ~/toolchains/* downloads/
+			fi
+			# Walkaround for ccache permissions
+			# i think no need it ????
+			[ "" ] && \
+			if [ -d ~/.ccache ]; then
+				if [ "$(stat -c '%U %G' ~/.ccache/)" != "khadas khadas" ]; then
+					sudo chown khadas:khadas -R ~/.ccache/
+				fi
+			fi
+		fi
+	fi
+
+	local hostdeps="wget ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate \
+			gawk gcc-arm-linux-gnueabihf qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev fakeroot \
+			parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
+			nfs-kernel-server btrfs-progs ncurses-term p7zip-full kmod dosfstools libc6-dev-armhf-cross \
+			curl patchutils liblz4-tool libpython2.7-dev linux-base swig aptly acl \
+			locales ncurses-base pixz dialog systemd-container udev lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 \
+			bison libbison-dev flex libfl-dev lib32z1 libglib2.0-dev"
+
+
+	if [[ -z $build_host || "focal" == "$build_host" ]]; then
+		hostdeps="${hostdeps/lib32ncurses5 lib32tinfo5/lib32ncurses6 lib32tinfo6}"
+	fi
+
+	# Getting ready for Ubuntu 20.04
+	if [[ "$build_host" == "focal" ]]; then
+		hostdeps+=" python2 python3"
+		# strange maner to change system without user notify ;-)
+		local p=/usr/bin/python2.7
+		[ -s $p ] && \
+		for s in /usr/bin/python /usr/bin/python2; do
+			[ -L "$s" ] || continue
+			local o=$(readlink $s)
+			[ "$o" = "$p" ] || {
+				warning_msg "Need to change symlink $s to $p from $o"
+				need_sudo || true;
+				$sudo ln -fs $p $s
+			}
+		done
+	else
+		hostdeps+=" python libpython-dev"
+	fi
+
+	# warning: apt-cacher-ng will fail if installed and used both on host and in container/chroot environment with shared network
+	# set NO_APT_CACHER=yes to prevent installation errors in such case
+	if [[ $NO_APT_CACHER != yes ]]; then hostdeps="$hostdeps apt-cacher-ng"; fi
+
+	local deps=()
+	local installed=$(dpkg-query -W -f '${db:Status-Abbrev}|${binary:Package}\n' '*' 2>/dev/null | grep '^ii' | awk -F '|' '{print $2}' | cut -d ':' -f 1)
+
+	for packet in $hostdeps; do
+		if ! grep -q -x -e "$packet" <<< "$installed"; then deps+=("$packet"); fi
+	done
+
+	if [[ ${#deps[@]} -gt 0 ]]; then
+		info_msg "Installing build dependencies"
+		info_msg "Requires root privileges, please enter your passowrd!"
+		$sudo apt-get update
+		# need sudo -E for silent mode pass env param
+		$sudo apt-get -y --no-install-recommends install "${deps[@]}"
+		$sudo update-ccache-symlinks
+	fi
+
+	# enable arm binary format so that the cross-architecture chroot environment will work
+	mountpoint -q /proc/sys/fs/binfmt_misc/ || sudo mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc || {
+		if ! grep -q binfmt_misc <(lsmod); then
+			info_msg "Module 'binfmt_misc' not installed, try to install it!"
+			warning_msg "Requires root privileges, please enter your password!"
+			sudo modprobe -q binfmt_misc || {
+				# FIXME 'binfmt_misc' should be installed on host PC manually
+				# https://github.com/khadas/fenix/issues/35#issuecomment-492326880
+				if systemd-detect-virt -q -c; then
+                    error_msg "You are built in container: $(systemd-detect-virt), but the module 'binfmt_misc' is not installed, please exit the container to execute 'sudo modprobe binfmt_misc' on your host PC and try again!"
+				fi
+
+				exit -1
+			}
+		fi
+    }
+
+	test -e /proc/sys/fs/binfmt_misc/qemu-arm || sudo update-binfmts --enable qemu-arm
+	test -e /proc/sys/fs/binfmt_misc/qemu-aarch64 || sudo update-binfmts --enable qemu-aarch64
+}
+
+## Mount chroot
+mount_chroot() {
+	local target=$1
+	if [ -z "$target" ]; then
+		echo "Usage: mount_chroot <target>"
+		return -1
+	fi
+	mount -t proc chproc $target/proc
+	mount -t sysfs chsys $target/sys
+	mount -t devtmpfs chdev $target/dev || mount --bind /dev $target/dev
+	mount -t devpts chpts $target/dev/pts
+}
+
+## notice about need sudo
+need_sudo(){
+if [ "$sudo" ]; then
+    info_msg "[${FUNCNAME[1]}] This script requires root privileges, trying to use sudo, please enter your passowrd!"
+    sudo true || exit
+    info_msg "sudo works..."
+fi
+}
+
+unmount_deep(){
+    [ "$1" = "-v" -o "$1" = "-vv" ] && verbose_=$1 && shift
+    [ "$verbose_" ] && echo "[i] umount_deep $@" >&2
+    # simple deep unmount must works at most of cases ;-)
+    for t in "$@"; do
+	[ -d "$t" ] || continue
+	t_=$(realpath "$t")
+	max_=10
+	while [ $max_ -gt 0 ]; do
+	    mounted_=$(egrep -o "\s+$t_\S*" /proc/mounts 2>/dev/null | sort -r | uniq || true)
+	    [ ${#mounted_} = 0 ] && break
+	    [ "$verbose_" = "-vv" ] && echo "[i] umount($max_) " $mounted_ >&2
+	    msg_=$($sudo umount -v -R $mounted_ 2>&1 || echo ERROR)
+	    max_=$((max_-1))
+	done
+
+	[ $max_ = 0 ] && {
+	    #egrep -m1 -o "\s+$t_\s+" /proc/mounts && {
+	    error_msg "[e] umount_deep $@ - $msg_"
+	    return -1
+	}
+
+    done
+    return 0
+}
+
+## Umount chroot
+umount_chroot() {
+	unmount_deep "$1"
+}
+
+## Install debs in chroot
+install_deb_chroot()
+{
+	local package=$1
+	local name=$(basename $package)
+	cp $package $ROOTFS_TEMP/root/$name
+	info_msg "Installing $name in chroot..."
+	mount_chroot "$ROOTFS_TEMP"
+	chroot $ROOTFS_TEMP /bin/bash -c "dpkg -i /root/$name"
+	umount_chroot "$ROOTFS_TEMP"
+	rm -f $ROOTFS_TEMP/root/$name
+}
+
+## Umount
+do_umount() {
+    warning_msg  "do_unmount: - $1"
+	if mount | grep $1 > /dev/null; then
+		umount $1
+    fi
+}
+
+## Cleanup
+cleanup() {
+    cd $ROOT
+    echo "Cleanup..."
+    sync
+
+    trap - INT TERM EXIT
+
+    unmount_deep "$ROOTFS_TEMP" "$ROOTFS"
+}
+
+# Check & Create loop device if not exist
+check_loop_device()
+{
+	local device=$1
+
+	PARTITIONS=$(lsblk --raw --output "MAJ:MIN" --noheadings ${device} | tail -n +2)
+	COUNTER=1
+	for i in $PARTITIONS; do
+		MAJ=$(echo $i | cut -d: -f1)
+		MIN=$(echo $i | cut -d: -f2)
+		if [ ! -e "${device}p${COUNTER}" ]; then
+			if [ "$CONTAINER_COMPAT" == "yes" ]; then
+				warning_msg "Creating device node: ${device}p${COUNTER}"
+				mknod ${device}p${COUNTER} b $MAJ $MIN
+			else
+				error_msg "Device node $device does not exist!"
+				return -1
+			fi
+		fi
+		COUNTER=$((COUNTER + 1))
+	done
+}
+
+## Prepare toolhains
+prepare_toolchains() {
+
+	build_package "gcc-linaro-aarch64-linux-gnu:host"
+	build_package "gcc-linaro-aarch64-none-elf:host"
+	build_package "gcc-linaro-arm-none-eabi:host"
+	if [ "$UBOOT" == "mainline" ]; then
+		build_package "gcc-linaro-aarch64-elf:host"
+		build_package "gcc-arm-aarch64-none-linux-gnu:host"
+	fi
+
+	return 0
+}
+
+## Prepare packages
+prepare_packages() {
+
+    build_package "utils:host"
+    build_package "images_upgrade:host"
+
+	if [ "$VENDOR" == "Rockchip" ]; then
+		build_package "rkbin:host"
+	fi
+}
+
+## returns md5 hash for current package list
+get_package_list_hash()
+{
+	( printf '%s\n' "$PACKAGE_LIST" | sort -u; printf '%s\n' "$PACKAGE_LIST_EXCLUDE" | sort -u; echo "$ROOTFSCACHE_VERSION" ) | md5sum | cut -d' ' -f 1
+}
+
+## create_sources_list <release> <basedir>
+##
+## <release>: buster|bionic|focal
+## <basedir>: path to root directory
+create_sources_list()
+{
+	local release=$1
+	local basedir=$2
+	[[ -z $basedir ]] && error_msg "No basedir passed to create_sources_list" && return -1
+
+	case $release in
+	buster)
+	cat <<-EOF > $basedir/etc/apt/sources.list
+	deb http://${DEBIAN_MIRROR} $release main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} $release main contrib non-free
+
+	deb http://${DEBIAN_MIRROR} ${release}-updates main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} ${release}-updates main contrib non-free
+
+	deb http://${DEBIAN_MIRROR} ${release}-backports main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} ${release}-backports main contrib non-free
+
+	deb http://security.debian.org/ ${release}/updates main contrib non-free
+	#deb-src http://security.debian.org/ ${release}/updates main contrib non-free
+	EOF
+	;;
+
+	bionic|focal)
+	cat <<-EOF > $basedir/etc/apt/sources.list
+	deb http://${UBUNTU_MIRROR} $release main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} $release main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-security main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-security main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-updates main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-updates main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
+	EOF
+	;;
+	esac
+}
+
+## compress_image
+compress_image() {
+	[[ $COMPRESS_IMAGE != yes ]] && return
+
+	echo ""
+	info_msg "Compressing image '$BUILD_IMAGES/$IMAGE_FILE_NAME' to '$BUILD_IMAGES/$IMAGE_FILE_NAME.xz' ..."
+
+	rm -rf "$BUILD_IMAGES/$IMAGE_FILE_NAME.xz"
+
+	# simple minimal progress
+	[ "$NO_PROGRESS" ] && {
+		P_=$$
+		(
+		    i_=0;d_=5
+		    while [ -d /proc/$P_ ]; do
+		    sleep $d_
+		    [ -e "$BUILD_IMAGES/$IMAGE_FILE_NAME.xz" ] || break
+		    i_=$((i_+d_))
+		    printf "[compress %03d] %s %s\n" "$i_" "$IMAGE_FILE_NAME.xz" \
+			"$(stat -c%s "$BUILD_IMAGES/$IMAGE_FILE_NAME.xz")"
+		    done
+		)&
+		BGM=$!
+	}
+
+	if [ "$INSTALL_TYPE" == "SD-USB" -o "$INSTALL_TYPE_RAW" == "yes" ]; then
+		if [ "$1" == "uboot-image" ]; then
+			label="Uboot"
+			desc="Uboot $VERSION minimal - fenix generated images https://github.com/khadas/fenix"
+		else
+			label="$DISTRIBUTION"
+			desc="$DISTRIBUTION $VERSION $DISTRIB_TYPE $DISTRIB_RELEASE - fenix generated images https://github.com/khadas/fenix"
+		fi
+
+
+		"$ROOT"/scripts/xze "$BUILD_IMAGES/$IMAGE_FILE_NAME" \
+		    --meta \
+		    LABEL="$label" \
+		    BOARD="$KHADAS_BOARD" \
+		    BUILDER="fenix" \
+		    LINK="https://dl.khadas.com/Firmware/" \
+		    DESC="$desc" \
+		    > "$BUILD_IMAGES/$IMAGE_FILE_NAME.xz"
+	else
+		"$ROOT"/scripts/xze "$BUILD_IMAGES/$IMAGE_FILE_NAME" > "$BUILD_IMAGES/$IMAGE_FILE_NAME.xz"
+	fi
+
+	[ "$BGM" ] && kill $BGM
+
+	[ "$NO_KEEP_IMAGE" ] && {
+	    info_msg "NO_KEEP_IMAGE (remove original): $IMAGE_FILE_NAME"
+	    rm "$BUILD_IMAGES/$IMAGE_FILE_NAME"
+	}
+
+	echo ""
+	info_msg "COMPRESSED IMAGE: ${GREEN} $BUILD_IMAGES/$IMAGE_FILE_NAME.xz ${ENDCOLOR} is ready!"
+}
+
+## check_make_params
+check_make_params() {
+	echo ""
+	for param in $MAKE_PARAMS
+	do
+		printf "${BOLDCYAN}%-30s:${ENDCOLOR}${BOLDGREEN}%10s${ENDCOLOR}\n" $param ${!param}
+	done
+	echo ""
+}
+
+## get_available_make_params
+get_available_make_params() {
+	echo ""
+	printf "${BOLDYELLOW}%-30s${ENDCOLOR}${BOLDYELLOW}%15s${ENDCOLOR}\n" "Parameter" "Value"
+	printf "=========================================================\n"
+	for param in $MAKE_PARAMS
+	do
+		key=$param
+		value=${param}_VALUES
+		printf "${BOLDCYAN}%-30s:${ENDCOLOR}${BOLDGREEN}%20s${ENDCOLOR}\n" "$key" "${!value}"
+	done
+	echo ""
+}
+
+fix_perms(){
+	# fix files perm for original user
+	[ -e "$1" ] || return 0
+	#info_msg "fix_perms_check: $1 [$UID:$UID]"
+	
+	if [ "$SUDO_UID" ]; then
+	    find "$1" ! -user $SUDO_UID -exec chown $SUDO_UID:$SUDO_GID {} \;
+	    return
+	else
+	    if find "$1" ! -user $UID | grep -q -m1 "" ; then
+		info_msg "fix_perms: $1 [$UID:$UID]"
+		$sudo chown -R $UID:$UID "$1"
+	    fi
+	    return
+	fi
+	return 0
+}
+
+clean_old_session(){
+    info_msg "Cleanup old build session"
+    unmount_deep "$BUILD_IMAGES"
+    for l in "$ROOTFS" "$BUILD_IMAGES"/.tmp; do
+	if [ -e "$l" ]; then
+	    info_msg "Cleanup: $l"
+	    $sudo rm -rf $l
+	fi
+    done
+    fix_perms "$BUILD_IMAGES"
+}
+
+## post_create_image
+post_create_image() {
+	# cleanup
+	# add some safety ;-) before make rm -rf
+	unmount_deep "$ROOTFS" "$BUILD_IMAGES"/.tmp
+
+    ### JEVOIS: DO NOT DELETE .tmp, instead move it up
+	#rm -rf "$BUILD_IMAGES"/.tmp
+    rm -rf "$BUILD_IMAGES"/../rootfs-jevois
+	mv "$BUILD_IMAGES"/.tmp "$BUILD_IMAGES"/../rootfs-jevois
+
+	fix_perms "$BUILD_IMAGES"
+
+	# upload images
+
+	if [ "$UPLOAD_SCRIPT" -a -x "$UPLOAD_SCRIPT" ]; then
+	    echo BUILD_IMAGES="$BUILD_IMAGES" \
+	    IMAGE_FILE_NAME="$IMAGE_FILE_NAME" \
+	    CREATE_ROOTFS_CACHE_ONLY="$CREATE_ROOTFS_CACHE_ONLY" \
+	    "$UPLOAD_SCRIPT"
+
+	    BUILD_IMAGES="$BUILD_IMAGES" \
+	    IMAGE_FILE_NAME="$IMAGE_FILE_NAME" \
+	    CREATE_ROOTFS_CACHE_ONLY="$CREATE_ROOTFS_CACHE_ONLY" \
+	    "$UPLOAD_SCRIPT"
+	    return
+	fi
+
+	if [ "$UPLOAD" -a -d "$UPLOAD" ]; then
+	    for f in "$BUILD_IMAGES/"$IMAGE_FILE_NAME*; do
+		if [ -e "$f" ]; then
+		    info_msg "UPLOAD : $f to $UPLOAD"
+		    if [ "$SUDO_UID" ]; then
+			sudo -u $SUDO_USER mv "$f" "$UPLOAD"
+		    else
+			mv "$f" "$UPLOAD"
+		    fi
+		fi
+	    done
+	fi
+}
+
+check_active_session(){
+    info_msg "Check active build session $FPID [$$]"
+    APID=$(pgrep -F "$FPID" 2>/dev/null || true)
+    if [ "$APID" ]; then
+	error_msg "Prev build session detected: $APID"
+	ps $APID
+	return 2
+    fi
+    echo $$ > $FPID && {
+	info_msg "Start new build session $FPID [$$]"
+    }
+    return
+}
+
+check_busy_files(){
+    info_msg "Check busy files: $@"
+    for c in "$@"; do
+    if [ -d "$c" ]; then
+	need_sudo || true
+	prev=$($sudo lsof 2>&1 | grep -m1 "$c" || true)
+	[ "${#prev}" -gt 0 ] && {
+	    error_msg "$c busy\n$prev\n"
+	    return 1
+	}
+    fi
+    done
+    return 0
+}
+
+## download_rootfs_cache
+download_rootfs_cache() {
+	local cache_name=$1
+	local cache_url=$ROOTFS_CACHE_URL/$cache_name
+	local wget_cmd
+
+	mkdir -p $BUILD_IMAGES/cache/rootfs
+	cd $BUILD_IMAGES/cache/rootfs
+
+	wget_cmd="wget --timeout=30 --tries=3 --passive-ftp --no-check-certificate -O "
+
+	if [ ! -f ${cache_name}.download_complete ]; then
+		rm -rf $cache_name ${cache_name}.sha256
+	fi
+
+	# Check rootfs cache checksum
+	if ! `timeout 10 curl --head --fail --silent ${cache_url}.sha256 2>&1 >/dev/null`; then
+		warning_msg "Can't find rootfs cache checksum ${cache_name}.sha256 on server! Create it from scratch!"
+		return 255
+	fi
+
+	# Download rootfs cache checksum
+	local count=10
+	while [ $count -gt 0 ]; do
+		rm -rf ${cache_name}.sha256
+
+		if $wget_cmd "${cache_name}.sha256" "${cache_url}.sha256"; then
+			fix_perms "${cache_name}.sha256"
+			break
+		fi
+		count=$((count - 1))
+	done
+
+	if [ $count -eq 0 ]; then
+		error_msg "Cant't get $cache_name checksum : ${cache_name}.sha256\n Try later !!"
+		return -1
+	else
+		echo "Cache $cache_name checksum is: `cat ${cache_name}.sha256`"
+	fi
+
+	# Check rootfs cache checksum
+	if ! `timeout 10 curl --head --fail --silent ${cache_url} 2>&1 >/dev/null`; then
+		warning_msg "Can't find rootfs cache ${cache_name} on server! Create it from scratch!"
+		return 255
+	fi
+
+	# Download rootfs cache
+	count=10
+	while [ $count -gt 0 ]; do
+		rm -rf $cache_name
+
+		if $wget_cmd "$cache_name" "$cache_url"; then
+		    calc_sha256="$(sha256sum $cache_name | cut -d" " -f1)"
+		    [ `cat ${cache_name}.sha256` == "${calc_sha256}" ] && break
+
+		    error_msg "Incorrect checksum calculated on downloaded file: got ${calc_sha256}, wanted `cat ${cache_name}.sha256`"
+			rm -rf $cache_name
+		fi
+		count=$((count - 1))
+	done
+
+	if [ $count -eq 0 ]; then
+		error_msg "Cant't get $cache_name cache : $cache_url\n Try later !!"
+		return -1
+	else
+		fix_perms "$cache_name"
+		echo "Calculated checksum is: ${calc_sha256}"
+		touch ${cache_name}.download_complete
+		fix_perms "${cache_name}.download_complete"
+	fi
+}

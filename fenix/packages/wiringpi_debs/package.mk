@@ -1,0 +1,32 @@
+PKG_NAME="wiringpi_debs"
+PKG_VERSION="1349493e70e4660ebdb98026526db12ff14670d1"
+PKG_SHA256="5264814623d1a1bb1fb5ed649d5b714bb1507190290c8df6c1e6aa08116ae144"
+PKG_SOURCE_DIR="wiringpi_debs-${PKG_VERSION}*"
+PKG_SITE="$GITHUB_URL/numbqq/wiringpi_debs"
+PKG_URL="$PKG_SITE/archive/$PKG_VERSION.tar.gz"
+[[ $DOWNLOAD_MIRROR == china ]] && \
+{
+PKG_SITE="$GITEE_URL/numbqq/wiringpi_debs"
+PKG_URL="$PKG_SITE/repository/archive/$PKG_VERSION.tar.gz"
+PKG_SOURCE_DIR="$PKG_NAME"
+PKG_SHA256="8205244858dd59ab9e99a487b480551c2539d68b81a38724ec640f1c07462da8"
+}
+PKG_ARCH="arm aarch64"
+PKG_LICENSE="GPL"
+PKG_SHORTDESC="WiringPi"
+PKG_SOURCE_NAME="wiringpi_debs-${PKG_VERSION}.tar.gz"
+PKG_NEED_BUILD="YES"
+
+
+make_target() {
+	:
+}
+
+makeinstall_target() {
+	mkdir -p $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/wiringpi_debs
+	# Remove old debs
+	rm -rf $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/wiringpi_debs/*
+	if [ -d ${DISTRIB_RELEASE}/${DISTRIB_ARCH}/ ]; then
+		cp ${DISTRIB_RELEASE}/${DISTRIB_ARCH}/*.deb $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/wiringpi_debs
+	fi
+}

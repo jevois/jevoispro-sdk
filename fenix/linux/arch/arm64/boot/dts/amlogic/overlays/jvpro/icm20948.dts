@@ -1,0 +1,32 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-Pro overlay to enable ICM20948 inertial measurement unit (IMU)
+//
+// The IMU is expected to be connected to SPI_A (GPIOX_8-11) on the camera M.2 connector of JeVois-Pro.
+//
+
+/ {
+    // JEVOIS: camera sensor:
+	fragment@0 {
+		target = <&spicc0>;
+
+		__overlay__ {
+			status = "okay";
+            
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+            // For now, just a generic SPI driver, and all the ICM-20948-specific programming is in the JeVois userland
+            // code. May later replace with a kernel module.
+            spidev@0 {
+		        status = "okay";
+		        compatible = "linux,spidev";
+		        spi-max-frequency = <7000000>; // spi default max clock in Hz. ICM20948 supports up to 7MHz.
+		        reg = <0>;
+	        };
+
+        };
+	};
+};

@@ -1,0 +1,708 @@
+# Functions:
+# install_common
+# install_distribution_specific
+# create_rootfs_cache
+# prepare_partitions
+# prepare_rootfs
+# build_rootfs
+
+install_common()
+{
+	info_msg "Applying common tweaks..."
+
+	# Remove default interfaces file if present
+	# before installing board support package
+	rm -f $ROOTFS_TEMP/etc/network/interfaces
+
+	# change time zone data
+	info_msg "Setup timezone to '$TZDATA'"
+	echo $TZDATA > $ROOTFS_TEMP/etc/timezone
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "ln -sf /usr/share/zoneinfo/$TZDATA  /etc/localtime"'
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "dpkg-reconfigure -f noninteractive tzdata"'
+
+	# initial date for fake-hwclock
+	date -u '+%Y-%m-%d %H:%M:%S' > $ROOTFS_TEMP/etc/fake-hwclock.data
+
+	# Install linux image deb in chroot
+	if [ -f $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB}_${VERSION}_${DISTRIB_ARCH}.deb ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB}_${VERSION}_${DISTRIB_ARCH}.deb
+	fi
+
+	# Install linux dtb deb in chroot
+	if [ -f $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB/image/dtb}_${VERSION}_${DISTRIB_ARCH}.deb ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB/image/dtb}_${VERSION}_${DISTRIB_ARCH}.deb
+	fi
+
+	# Install linux headers deb in chroot
+	if [ -f $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB/image/headers}_${VERSION}_${DISTRIB_ARCH}.deb ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/${LINUX_IMAGE_DEB/image/headers}_${VERSION}_${DISTRIB_ARCH}.deb
+	fi
+
+	# Install linux firmware in chroot
+	if [ -f $BUILD_DEBS/$VERSION/${LINUX_FIRMWARE_DEB}_${VERSION}_${DISTRIB_ARCH}.deb ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/${LINUX_FIRMWARE_DEB}_${VERSION}_${DISTRIB_ARCH}.deb
+	fi
+
+	# Install u-boot deb in chroot
+	if [ -f $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${LINUX_UBOOT_DEB}_${VERSION}-${UBOOT_VER}_${DISTRIB_ARCH}.deb ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${LINUX_UBOOT_DEB}_${VERSION}-${UBOOT_VER}_${DISTRIB_ARCH}.deb
+	fi
+
+	if [ -n "$GPU_VER" ]; then
+		# Install GPU deb in chroot
+		if [ -f $BUILD_DEBS/$VERSION/$KHADAS_BOARD/linux-gpu-mali-${GPU_PLATFORM}_${VERSION}-${GPU_VER}_${DISTRIB_ARCH}.deb ]; then
+			install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/linux-gpu-mali-${GPU_PLATFORM}_${VERSION}-${GPU_VER}_${DISTRIB_ARCH}.deb
+		fi
+
+		# Install GPU development deb in chroot
+		if [ -f $BUILD_DEBS/$VERSION/$KHADAS_BOARD/linux-gpu-${VENDOR,,}-dev_${VERSION}_${DISTRIB_ARCH}.deb ]; then
+			install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/linux-gpu-${VENDOR,,}-dev_${VERSION}_${DISTRIB_ARCH}.deb
+		fi
+	fi
+
+	if [ "$DISTRIB_TYPE" != "server" ] && [ "$DISTRIB_TYPE" != "minimal" ]; then
+		install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/${FENIX_DESKTOP_DEB}_${VERSION}_all.deb
+		desktop_postinstall
+	fi
+
+	# Install common deb packages
+	if [[ $(type -t install_common_deb) == function ]]; then
+		install_common_deb
+	fi
+
+	# Install packages platform
+	if [[ $(type -t install_deb_packages_platform) == function ]]; then
+		install_deb_packages_platform
+	fi
+
+	# Install board deb in chroot
+	install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/${LINUX_BOARD_DEB}_${VERSION}_${DISTRIB_ARCH}.deb
+
+	if [ "$DISTRIB_TYPE" != "minimal" ]; then
+		# Install updater deb in chroot
+		install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/${FENIX_UPDATER_DEB}_${VERSION}_${DISTRIB_ARCH}.deb
+	fi
+
+	# Tweaks for platform
+	if [[ $(type -t tweaks_platform) == function ]]; then
+		tweaks_platform
+	fi
+
+	# Enable additional services
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload enable resize2fs.service system-check.service"'
+
+	# Disable repeated messages due to xconsole not being installed.
+	[[ -f $ROOTFS_TEMP/etc/rsyslog.d/50-default.conf ]] && sed '/daemon\.\*\;mail.*/,/xconsole/ s/.*/#&/' -i $ROOTFS_TEMP/etc/rsyslog.d/50-default.conf
+	# Disable deprecated parameter
+	[ -f $ROOTFS_TEMP/etc/rsyslog.conf ] && sed '/.*$KLogPermitNonKernelFacility.*/,// s/.*/#&/' -i $ROOTFS_TEMP/etc/rsyslog.conf
+
+    # JEVOIS: disable hostapt as it pollutes syslog because it is not configured by default:
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload disable hostapt.service"'
+
+	# Premit root login via SSH for the first boot
+	sed -i 's/#\?PermitRootLogin .*/PermitRootLogin yes/' $ROOTFS_TEMP/etc/ssh/sshd_config
+
+	# Clean ssh keys
+	rm -f $ROOTFS_TEMP/etc/ssh/ssh_host*
+
+	# Create watchdog log directory
+	mkdir -p $ROOTFS_TEMP/var/log/watchdog
+
+	# Prevent loading paralel printer port drivers
+	if [ -f $ROOTFS_TEMP/etc/modules-load.d/cups-filters.conf ]; then
+		sed "s/^lp/#lp/" -i $ROOTFS_TEMP/etc/modules-load.d/cups-filters.conf
+		sed "s/^ppdev/#ppdev/" -i $ROOTFS_TEMP/etc/modules-load.d/cups-filters.conf
+		sed "s/^parport_pc/#parport_pc/" -i $ROOTFS_TEMP/etc/modules-load.d/cups-filters.conf
+	fi
+
+	# remove legal info from Ubuntu
+	[[ -f $ROOTFS_TEMP/etc/legal ]] && rm $ROOTFS_TEMP/etc/legal
+
+	# DNS fix. package resolvconf is not available everywhere
+	if [ -d $ROOTFS_TEMP/etc/resolvconf/resolv.conf.d ]; then
+		echo "nameserver $NAMESERVER" > $ROOTFS_TEMP/etc/resolvconf/resolv.conf.d/head
+	fi
+
+	# configure network manager
+	sed "s/managed=\(.*\)/managed=true/g" -i $ROOTFS_TEMP/etc/NetworkManager/NetworkManager.conf
+	# Just regular DNS and maintain /etc/resolv.conf as a file
+	sed "/dns/d" -i $ROOTFS_TEMP/etc/NetworkManager/NetworkManager.conf
+	sed "s/\[main\]/\[main\]\ndns=default\nrc-manager=file/g" -i $ROOTFS_TEMP/etc/NetworkManager/NetworkManager.conf
+	if [[ -n $NM_IGNORE_DEVICES ]]; then
+		mkdir -p $ROOTFS_TEMP/etc/NetworkManager/conf.d/
+		cat <<-EOF > $ROOTFS_TEMP/etc/NetworkManager/conf.d/10-ignore-interfaces.conf
+		[keyfile]
+		unmanaged-devices=$NM_IGNORE_DEVICES
+		EOF
+	fi
+
+	# nsswitch settings for sane DNS behavior: remove resolve, assure libnss-myhostname support
+	sed "s/hosts\:.*/hosts:          files mymachines dns myhostname/g" -i $ROOTFS_TEMP/etc/nsswitch.conf
+
+
+    # JEVOIS: Create jevoispro.service and configure multi-user target by default:
+    cat <<-EOF > $ROOTFS_TEMP/lib/systemd/system/jevoispro.service
+[Unit]
+Description=JeVois-Pro Core Software
+Documentation=http://jevois.org
+After=getty.service
+
+[Service]
+ExecStart=/usr/bin/jevoispro.sh
+Type=simple
+Restart=on-failure
+TimeoutSec=180
+
+[Install]
+WantedBy=jevoispro.target
+EOF
+
+    cat <<-EOF > $ROOTFS_TEMP/lib/systemd/system/jevoispro.target
+[Unit]
+Description=JeVois-Pro boot target
+Requires=multi-user.target
+Wants=jevoispro.service
+Conflicts=rescue.service rescue.target
+After=multi-user.target rescue.service rescue.target
+AllowIsolate=yes
+EOF
+
+    mkdir $ROOTFS_TEMP/etc/systemd/system/jevoispro.target.wants
+
+    ln -s /lib/systemd/system/jevoispro.service $ROOTFS_TEMP/etc/systemd/system/jevoispro.target.wants/jevoispro.service
+
+    # do not enable it, should first boot to multi-user or graphical and then enable:
+	#eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload set-default jevoispro.target"'
+}
+
+install_distribution_specific()
+{
+	info_msg "Applying distribution specific tweaks for $DISTRIB_RELEASE"
+
+	case $DISTRIB_RELEASE in
+	buster)
+		# remove doubled uname from motd
+		[[ -f $ROOTFS_TEMP/etc/update-motd.d/10-uname ]] && rm $ROOTFS_TEMP/etc/update-motd.d/10-uname
+		# rc.local is not existing in buster but we might need it
+		cat <<-EOF > $ROOTFS_TEMP/etc/rc.local
+		#!/bin/sh -e
+		#
+		# rc.local
+		#
+		# This script is executed at the end of each multiuser runlevel.
+		# Make sure that the script will "exit 0" on success or any other
+		# value on error.
+		#
+		# In order to enable or disable this script just change the execution
+		# bits.
+		#
+		# By default this script does nothing.
+
+		exit 0
+		EOF
+		chmod 755 $ROOTFS_TEMP/etc/rc.local
+
+		if [ "$DISTRIB_TYPE" != "minimal" ]; then
+			# disable watchdog
+			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable watchdog.service"'
+			# Disable Lirc service
+			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable lircd.socket lircd.service lircd-setup.service lircd-uinput.service lircmd.service irexec.service"'
+		fi
+		;;
+	bionic|focal)
+		# remove doubled uname from motd
+		[[ -f $$ROOTFS_TEMP/etc/update-motd.d/10-uname ]] && rm $ROOTFS_TEMP/etc/update-motd.d/10-uname
+		# remove motd news from motd.ubuntu.com
+		[[ -f $ROOTFS_TEMP/etc/default/motd-news ]] && sed -i "s/^ENABLED=.*/ENABLED=0/" $ROOTFS_TEMP/etc/default/motd-news
+		# Basic Netplan config. Let NetworkManager manage all devices on this system
+		[[ -d $ROOTFS_TEMP/etc/netplan ]] && cat <<-EOF > $ROOTFS_TEMP/etc/netplan/fenix-default.yaml
+		network:
+		  version: 2
+		  renderer: NetworkManager
+		EOF
+		# DNS fix
+		sed -i "s/#DNS=.*/DNS=$NAMESERVER/g" $ROOTFS_TEMP/etc/systemd/resolved.conf
+		chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload mask ondemand.service"
+		if [ "$DISTRIB_TYPE" != "minimal" ]; then
+			# disable watchdog
+			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable watchdog.service"'
+			# Disable Lirc service
+			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable lircd.socket lircd.service lircd-setup.service lircd-uinput.service lircmd.service irexec.service"'
+		fi
+		# Journal service adjustements
+		sed -i "s/#Storage=.*/Storage=volatile/g" $ROOTFS_TEMP/etc/systemd/journald.conf
+		sed -i "s/#Compress=.*/Compress=yes/g" $ROOTFS_TEMP/etc/systemd/journald.conf
+		sed -i "s/#RateLimitIntervalSec=.*/RateLimitIntervalSec=30s/g" $ROOTFS_TEMP/etc/systemd/journald.conf
+		sed -i "s/#RateLimitBurst=.*/RateLimitBurst=10000/g" $ROOTFS_TEMP/etc/systemd/journald.conf
+		;;
+	esac
+}
+
+## unpacks cached rootfs for $DISTRIB_RELEASE or creates one
+create_rootfs_cache()
+{
+	local packages_hash=$(get_package_list_hash)
+	local cache_fname=$BUILD_IMAGES/cache/rootfs/${DISTRIB_RELEASE}-${DISTRIB_TYPE}-${DISTRIB_ARCH}.$packages_hash.tar.lz4
+	local display_name=${DISTRIB_RELEASE}-${DISTRIB_TYPE}-${DISTRIB_ARCH}.${packages_hash:0:3}...${packages_hash:29}.tar.lz4
+	if [[ -f $cache_fname && -f ${cache_fname}.sha256 && "$FORCE_CREATE_ROOTFS_CACHE" != "yes" && "$CREATE_ROOTFS_CACHE_ONLY" != "yes" ]]; then
+		local date_diff=$(( ($(date +%s) - $(stat -c %Y $cache_fname)) / 86400 ))
+		# Check
+		local cache_sha256=$(cat ${cache_fname}.sha256)
+		local calc_sha256=$(sha256sum $cache_fname | cut -d" " -f1)
+
+		if [[ $cache_sha256 == $calc_sha256 ]]; then
+			info_msg "Extracting $display_name $date_diff days old"
+			# may be no need progress at all its very fast
+			lz4 -dc < $cache_fname | tar xp --xattrs -C $ROOTFS_TEMP/
+
+			return
+		else
+			warning_msg "Cache `basename $cache_fname` checksum not match! Clean up!"
+			rm $cache_fname  ${cache_fname}.sha256
+		fi
+	fi
+
+	if [[ "$SKIP_ROOTFS_CACHE_DOWNLOAD" != "yes" && "$FORCE_CREATE_ROOTFS_CACHE" != "yes" && "$CREATE_ROOTFS_CACHE_ONLY" != "yes" ]]; then
+		info_msg "Try to download cache from server"
+		if download_rootfs_cache $(basename $cache_fname); then
+			local date_diff=$(( ($(date +%s) - $(stat -c %Y $cache_fname)) / 86400 ))
+			info_msg "Extracting $display_name $date_diff days old"
+			# may be no need progress at all its very fast
+			lz4 -dc < $cache_fname | tar xp --xattrs -C $ROOTFS_TEMP/
+
+			return
+		fi
+	fi
+
+	if [[ "$FORCE_CREATE_ROOTFS_CACHE" == "yes" || "$CREATE_ROOTFS_CACHE_ONLY" == "yes" ]]; then
+		warning_msg "Force creating rootfs cache"
+		rm -f $BUILD_IMAGES/cache/rootfs/${DISTRIB_RELEASE}-${DISTRIB_TYPE}-${DISTRIB_ARCH}.*
+	fi
+
+	info_msg "Creating new rootfs for $DISTRIB_RELEASE-$DISTRIB_TYPE"
+
+	# stage: debootstrap base system
+	if [[ $NO_APT_CACHER != yes ]]; then
+		# apt-cacher-ng apt-get proxy parameter
+		local apt_extra="-o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\""
+		local apt_mirror="http://${APT_PROXY_ADDR:-localhost:3142}/$APT_MIRROR"
+	else
+		local apt_mirror="http://$APT_MIRROR"
+	fi
+
+	# fancy progress bars
+	[ "$NO_COLOR" -o "$NO_PROGRESS" ] || \
+	local apt_extra_progress="--show-progress -o DPKG::Progress-Fancy=1"
+
+	info_msg "Installing base system - Stage 1/2"
+	eval 'debootstrap --variant=minbase --include=${DEBOOTSTRAP_LIST// /,} ${PACKAGE_LIST_EXCLUDE:+ --exclude=${PACKAGE_LIST_EXCLUDE// /,}} \
+		--arch=$DISTRIB_ARCH --components=${DEBOOTSTRAP_COMPONENTS} --foreign $DISTRIB_RELEASE $ROOTFS_TEMP/ $apt_mirror'
+
+	[[ ${PIPESTATUS[0]} -ne 0 || ! -f $ROOTFS_TEMP/debootstrap/debootstrap ]] && error_msg "Debootstrap base system first stage failed" && return -1
+
+	cp /usr/bin/$QEMU_BINARY $ROOTFS_TEMP/usr/bin/
+
+	mkdir -p $ROOTFS_TEMP/usr/share/keyrings/
+	cp /usr/share/keyrings/debian-archive-keyring.gpg $ROOTFS_TEMP/usr/share/keyrings/
+	cp /usr/share/keyrings/ubuntu-archive-keyring.gpg $ROOTFS_TEMP/usr/share/keyrings/
+
+	info_msg "Installing base system - Stage 2/2"
+	eval 'chroot $ROOTFS_TEMP /bin/bash -c "/debootstrap/debootstrap --second-stage"'
+
+	[[ ${PIPESTATUS[0]} -ne 0 || ! -f $ROOTFS_TEMP/bin/bash ]] && error_msg "Debootstrap base system second stage failed" && return -1
+
+	mount_chroot "$ROOTFS_TEMP"
+
+	# policy-rc.d script prevents starting or reloading services during image creation
+	printf '#!/bin/sh\nexit 101' > $ROOTFS_TEMP/usr/sbin/policy-rc.d
+	chroot $ROOTFS_TEMP /bin/bash -c "dpkg-divert --quiet --local --rename --add /sbin/initctl"
+	chroot $ROOTFS_TEMP /bin/bash -c "dpkg-divert --quiet --local --rename --add /sbin/start-stop-daemon"
+	printf '#!/bin/sh\necho "Warning: Fake start-stop-daemon called, doing nothing"' > $ROOTFS_TEMP/sbin/start-stop-daemon
+	printf '#!/bin/sh\necho "Warning: Fake initctl called, doing nothing"' > $ROOTFS_TEMP/sbin/initctl
+	chmod 755 $ROOTFS_TEMP/usr/sbin/policy-rc.d
+	chmod 755 $ROOTFS_TEMP/sbin/initctl
+	chmod 755 $ROOTFS_TEMP/sbin/start-stop-daemon
+
+	# stage: configure language and locales
+	info_msg "Configuring locales $DEST_LANG"
+
+	[[ -f $ROOTFS_TEMP/etc/locale.gen ]] && sed -i "s/^# $DEST_LANG/$DEST_LANG/" $ROOTFS_TEMP/etc/locale.gen
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "locale-gen $DEST_LANG"'
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "update-locale LANG=$DEST_LANG LANGUAGE=$DEST_LANG LC_MESSAGES=$DEST_LANG"'
+
+	if [[ -f $ROOTFS_TEMP/etc/default/console-setup ]]; then
+		sed -e 's/CHARMAP=.*/CHARMAP="UTF-8"/' -e 's/FONTSIZE=.*/FONTSIZE="8x16"/' \
+			-e 's/CODESET=.*/CODESET="guess"/' -i $ROOTFS_TEMP/etc/default/console-setup
+		eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "setupcon --save"'
+	fi
+
+	# stage: create apt sources list
+	create_sources_list "$DISTRIB_RELEASE" "$ROOTFS_TEMP/"
+    mkdir -p ${ROOTFS_TEMP}/etc/apt/sources.list.d
+
+    # JEVOIS: add source for jevois packages. Since it is an https repo, bypass apt-cacher-ng:
+    apt_extra="${apt_extra} -o Acquire::https::Proxy=DIRECT"
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
+    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/apt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/jevois.list update"'
+    echo "JEVOIS: added jevois.usc.edu deb source for jevois packages."
+
+    # JEVOIS: add source for coral edge tpu packages. Since it is an https repo, bypass apt-cacher-ng:
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"'
+    LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-edgetpu.list
+    LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-cloud-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-cloud.list
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-edgetpu.list update"'
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-cloud.list update"'
+    echo "JEVOIS: added Coral Edge TPU deb source for jevois packages."
+        
+	# compressing packages list to gain some space
+	echo "Acquire::GzipIndexes "true"; Acquire::CompressionTypes::Order:: "gz";" > $ROOTFS_TEMP/etc/apt/apt.conf.d/02compress-indexes
+	echo "Acquire::Languages "none";" > $ROOTFS_TEMP/etc/apt/apt.conf.d/no-languages
+
+	# stage: install key
+	cp $CONFIG/fenix.key $ROOTFS_TEMP
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "cat fenix.key | apt-key add -"'
+	rm $ROOTFS_TEMP/fenix.key
+
+	# add armhf arhitecture to arm64
+	if [[ $DISTRIB_ARCH == arm64 ]]; then
+		eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "dpkg --add-architecture armhf"'
+	fi
+
+	# this should fix resolvconf installation failure in some cases
+	chroot $ROOTFS_TEMP /bin/bash -c 'echo "resolvconf resolvconf/linkify-resolvconf boolean false" | debconf-set-selections'
+
+	# stage: update packages list
+	info_msg "Updating package list $DISTRIB_RELEASE"
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-get -y $apt_extra update"'
+
+	# stage: upgrade base packages from xxx-updates and xxx-backports repository branches
+	info_msg "Upgrading base packages"
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "DEBIAN_FRONTEND=noninteractive apt-get -y \
+		$apt_extra $apt_extra_progress upgrade"'
+
+	# stage: install additional packages
+	info_msg "Installing packages"
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "DEBIAN_FRONTEND=noninteractive apt-get -y \
+		$apt_extra $apt_extra_progress --no-install-recommends install $PACKAGE_LIST"' \
+
+	if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+		error_msg "Installation of packages failed"
+		return -1
+	fi
+
+	[ "$DEBUG" ] && {
+	# DEBUG: print free space
+	echo -e "\nFree space:"
+	eval 'df -h'
+	}
+
+	# stage: remove downloaded packages
+	chroot $ROOTFS_TEMP /bin/bash -c "apt-get clean"
+
+	# this is needed for the build process later since resolvconf generated file in /run is not saved
+	rm $ROOTFS_TEMP/etc/resolv.conf
+	echo "nameserver $NAMESERVER" >> $ROOTFS_TEMP/etc/resolv.conf
+
+	# stage: make rootfs cache archive
+	info_msg "Ending debootstrap process and preparing cache $DISTRIB_RELEASE"
+	sync
+	# the only reason to unmount here is compression progress display
+	# based on rootfs size calculation
+	umount_chroot "$ROOTFS_TEMP"
+
+	if [ "$NO_PROGRESS" ]; then
+	    tar cp --xattrs --directory=$ROOTFS_TEMP/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
+		--exclude='./sys/*' . | lz4 -c > $cache_fname
+	else
+	    tar cp --xattrs --directory=$ROOTFS_TEMP/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
+		--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $ROOTFS_TEMP/ | cut -f1) -N "$display_name" | lz4 -c > $cache_fname
+	fi
+	sha256sum $cache_fname | cut -d" " -f1 > ${cache_fname}.sha256
+	fix_perms $cache_fname ${cache_fname}.sha256
+
+	[[ "$CREATE_ROOTFS_CACHE_ONLY" == "yes" ]] && info_msg "ROOTFS CACHE: ${GREEN}${cache_fname} ${ENDCOLOR} is ready!" || true
+}
+
+## creates image file, partitions and fs
+prepare_partitions()
+{
+	info_msg "Preparing image file for rootfs..."
+
+	if [[ $(lsb_release -sc) =~ bionic|focal ]]; then
+		EXT4_MKOPTS="-q -F -L ROOTFS -m 2 -O ^64bit,^metadata_csum"
+	elif [[ $(lsb_release -sc) == "xenial" ]]; then
+		EXT4_MKOPTS="-q -F -L ROOTFS -m 2"
+	fi
+
+	# calculate rootfs size
+	local rootfs_size=$(du -sm $ROOTFS_TEMP/ | cut -f1) # MiB
+	info_msg "Current rootfs cache size: $rootfs_size MiB"
+	if [[ -n $FIXED_IMAGE_SIZE && $FIXED_IMAGE_SIZE =~ ^[0-9]+$ ]]; then
+		info_msg "Using user-defined image size: $FIXED_IMAGE_SIZE MiB"
+		local rootfs_image_size=$FIXED_IMAGE_SIZE
+		# basic sanity check
+		if [[ $ROOTFS_TYPE != nfs && $rootfs_image_size -lt $rootfs_size ]]; then
+			error_msg "User defined image size is too small - $rootfs_image_size <= $rootfs_size" && return -1
+		fi
+	else
+		# Hardcoded overhead +30% for ext4 is needed for desktop images,
+		# file creation and align the size up to 4MiB
+		if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
+			# Desktop image size
+            # JEVOIS: use +110% instead of khadas 40% so we have lots of room for custom software
+			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 2.1) / 1 + 128) / 4 + 1) * 4")
+		else
+			# Server image size
+			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 1.2) / 1 + 0) / 4 + 1) * 4")
+		fi
+	fi
+
+	if [ "$INSTALL_TYPE" == "EMMC" ]; then
+		info_msg "Creating eMMC rootfs image..."
+		rm -rf ${BUILD_IMAGES}/rootfs.img
+		dd if=/dev/zero of=$BUILD_IMAGES/rootfs.img bs=1M count=0 seek=$rootfs_image_size
+		mkfs.ext4 $EXT4_MKOPTS $BUILD_IMAGES/rootfs.img
+		rm -rf $ROOTFS && install -d $ROOTFS
+		mount -o loop $BUILD_IMAGES/rootfs.img $ROOTFS
+		local rootfs_uuid="UUID=$(blkid -s UUID -o value $BUILD_IMAGES/rootfs.img)"
+	elif [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" != "JVPRO" ]; then
+		rm -rf ${BUILD_IMAGES}/${IMAGE_FILE_NAME}
+		IMAGE_SIZE=$((rootfs_image_size + 300)) # SD/USB image szie = BOOT(256MB) + ROOTFS
+		info_msg "Create SD/USB image..."
+		dd if=/dev/zero of=${BUILD_IMAGES}/${IMAGE_FILE_NAME} bs=1M count=0 seek=$IMAGE_SIZE
+		fdisk "${BUILD_IMAGES}/${IMAGE_FILE_NAME}" <<-EOF
+		o
+		n
+		p
+		1
+		32768
+		524287
+		a
+		t
+		b
+		n
+		p
+		2
+		524288
+
+		p
+		w
+
+		EOF
+
+		IMAGE_LOOP_DEV="$(losetup --show -f ${BUILD_IMAGES}/${IMAGE_FILE_NAME})"
+		if [[ -z $IMAGE_LOOP_DEV ]]; then
+			error_msg "Unable to find free loop device!"
+			return -1
+		fi
+		export IMAGE_LOOP_DEV
+		IMAGE_LOOP_DEV_BOOT="${IMAGE_LOOP_DEV}p1"
+		IMAGE_LOOP_DEV_ROOTFS="${IMAGE_LOOP_DEV}p2"
+		partprobe "${IMAGE_LOOP_DEV}"
+
+		check_loop_device "$IMAGE_LOOP_DEV"
+
+		mkfs.vfat -n BOOT "${IMAGE_LOOP_DEV_BOOT}"
+		mkfs.ext4 $EXT4_MKOPTS "${IMAGE_LOOP_DEV_ROOTFS}"
+		rm -rf $ROOTFS && mkdir -p $ROOTFS
+		mount "${IMAGE_LOOP_DEV_ROOTFS}" $ROOTFS
+		mkdir -p $ROOTFS/boot
+		mount "${IMAGE_LOOP_DEV_BOOT}" $ROOTFS/boot
+		local rootfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_ROOTFS)"
+		local bootfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_BOOT)"
+	elif [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" == "JVPRO" ]; then
+		#IMAGE_SIZE=$((rootfs_image_size + 300 + 16384)) # JEVOIS SD/USB image size = BOOT(256MB) + ROOTFS + JEVOIS (16GB)
+		IMAGE_SIZE=60946 # JEVOIS: for 64GB sd card, should finely adjust based on real capacity
+        
+		info_msg "Create SD/USB image..."
+		dd if=/dev/zero of=${BUILD_IMAGES}/${IMAGE_FILE_NAME} bs=1M count=0 seek=$IMAGE_SIZE
+
+        # JEVOIS: because we have empty space at start (for bootloaders, etc), fdisk will use 2048 as default start.
+        # So we need to compute and explicitly specify the last sector of rootfs and first sector of jevois:
+        local rootfs_last_sec=$((rootfs_image_size * 2048 + 524288))
+        local jevoisfs_first_sec=$((rootfs_last_sec+1))
+
+        echo "JEVOIS: rootfs/jevoisfs $rootfs_last_sec / $jevoisfs_first_sec"
+
+		fdisk "${BUILD_IMAGES}/${IMAGE_FILE_NAME}" <<-EOF
+o
+n
+p
+1
+32768
+524287
+a
+t
+b
+n
+p
+2
+524288
+${rootfs_last_sec}
+n
+p
+3
+${jevoisfs_first_sec}
+
+t
+3
+b
+p
+w
+
+EOF
+
+		IMAGE_LOOP_DEV="$(losetup --show -f ${BUILD_IMAGES}/${IMAGE_FILE_NAME})"
+		if [[ -z $IMAGE_LOOP_DEV ]]; then
+			error_msg "Unable to find free loop device!"
+			return -1
+		fi
+		export IMAGE_LOOP_DEV
+		IMAGE_LOOP_DEV_BOOT="${IMAGE_LOOP_DEV}p1"
+		IMAGE_LOOP_DEV_ROOTFS="${IMAGE_LOOP_DEV}p2"
+		IMAGE_LOOP_DEV_JEVOIS="${IMAGE_LOOP_DEV}p3"
+		partprobe "${IMAGE_LOOP_DEV}"
+
+		check_loop_device "$IMAGE_LOOP_DEV"
+
+		mkfs.vfat -n BOOT "${IMAGE_LOOP_DEV_BOOT}"
+		mkfs.ext4 $EXT4_MKOPTS "${IMAGE_LOOP_DEV_ROOTFS}"
+		mkfs.vfat -n JEVOISPRO "${IMAGE_LOOP_DEV_JEVOIS}"
+		rm -rf $ROOTFS && mkdir -p $ROOTFS
+		mount "${IMAGE_LOOP_DEV_ROOTFS}" $ROOTFS
+		mkdir -p $ROOTFS/boot
+		mount "${IMAGE_LOOP_DEV_BOOT}" $ROOTFS/boot
+		mkdir -p $ROOTFS/jevoispro
+		mount "${IMAGE_LOOP_DEV_JEVOIS}" $ROOTFS/jevoispro
+		local rootfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_ROOTFS)"
+		local bootfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_BOOT)"
+		local jevoisfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_JEVOIS)"
+	fi
+
+	rm -rf $ROOTFS/lost+found
+
+	info_msg "Copying files to root directory..."
+
+	rsync_progress="--info=progress2,stats1"
+	[ "$NO_PROGRESS" ] && \
+		rsync_progress=
+
+	rsync -aHWXh --exclude="/boot/*" --exclude="/dev/*" --exclude="/proc/*" --exclude="/run/*" --exclude="/tmp/*" \
+			--exclude="/sys/*" $rsync_progress $ROOTFS_TEMP/ $ROOTFS/
+
+	# rsync /boot
+	info_msg "Copying files to /boot directory..."
+	if [[ $(findmnt --target $ROOTFS/boot -o FSTYPE -n) == vfat ]]; then
+		# fat32
+		rsync -rLtWh $rsync_progress $ROOTFS_TEMP/boot $ROOTFS
+	else
+		# ext4
+		rsync -aHWXh $rsync_progress $ROOTFS_TEMP/boot $ROOTFS
+	fi
+
+    # JEVOIS TODO: rsync /jevoispro
+    if [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" == "JVPRO" ]; then
+    	info_msg "Copying files to /jevoispro directory..."
+
+        info_msg "FIXME... TODO"
+		# something like: rsync -rLtWh --info=progress2,stats1 $ROOTFS_TEMP/jevoispro $ROOTFS
+
+    fi
+
+	if [[ -f $ROOTFS_TEMP/boot/env.txt ]]; then
+		sed -i s/rootdev=.*/rootdev=$rootfs_uuid/g $ROOTFS/boot/env.txt
+	fi
+
+	# create /etc/fstab
+	echo "# <file system>                              <mount point>   <type>  <options>                                                             <dump>  <pass>" > $ROOTFS/etc/fstab
+	echo "tmpfs                                          /tmp            tmpfs   defaults,nosuid                                                          0   0" >> $ROOTFS/etc/fstab
+	echo "$rootfs_uuid      /               ext4    defaults,noatime,nodiratime,commit=600,errors=remount-ro,x-gvfs-hide     0   1" >> $ROOTFS/etc/fstab
+	if [ "$INSTALL_TYPE" == "SD-USB" ]; then
+		echo "$bootfs_uuid                                 /boot           vfat    defaults                                                                 0   2" >> $ROOTFS/etc/fstab
+	fi
+
+    # JEVOIS: add /jevoispro to fstab
+    if [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" == "JVPRO" ]; then
+		echo "$jevoisfs_uuid                                 /jevoispro           vfat    rw,flush,noatime,umask=000                                                      0   2" >> $ROOTFS/etc/fstab
+    fi
+
+	[ "$DEBUG" ] && {
+	# DEBUG: print free space
+	info_msg "Free space:"
+	eval 'df -h'
+	}
+
+	sync
+
+	if [ "$INSTALL_TYPE" == "SD-USB" ]; then
+        if [ "${KHADAS_BOARD}" == "JVPRO" ]; then umount $ROOTFS/jevoispro; fi
+		umount $ROOTFS/boot
+		losetup -d "${IMAGE_LOOP_DEV}"
+	fi
+	umount $ROOTFS
+}
+
+## Prepare rootfs
+prepare_rootfs() {
+	info_msg "Preparing rootfs for ${KHADAS_BOARD}-${DISTRIB_RELEASE}-${DISTRIB_TYPE}"
+	# add some safety before make rm -rf ;-)
+	unmount_deep "$ROOTFS_TEMP"
+	rm -rf "$ROOTFS_TEMP"
+	mkdir -p "$ROOTFS_TEMP" "$BUILD_IMAGES/cache/rootfs"
+
+	trap cleanup INT EXIT TERM QUIT
+
+	create_rootfs_cache
+
+	[[ "$CREATE_ROOTFS_CACHE_ONLY" == "yes" ]] && return
+
+	install_distribution_specific
+
+	install_common
+
+	# remove service start blockers
+	rm -f $ROOTFS_TEMP/sbin/initctl $ROOTFS_TEMP/sbin/start-stop-daemon
+	chroot $ROOTFS_TEMP /bin/bash -c "dpkg-divert --quiet --local --rename --remove /sbin/initctl"
+	chroot $ROOTFS_TEMP /bin/bash -c "dpkg-divert --quiet --local --rename --remove /sbin/start-stop-daemon"
+	rm -f $ROOTFS_TEMP/usr/sbin/policy-rc.d
+}
+
+## Rootfs
+build_rootfs() {
+
+	info_msg "Building rootfs for ${KHADAS_BOARD}-${DISTRIB_RELEASE}"
+
+	ret=0
+	cd ${ROOT}
+
+	if [ "$INSTALL_TYPE" == "EMMC" ]; then
+		# firstboot initialization: for 'ROOTFS' partition resize
+		# just for EMMC image.
+		touch $ROOTFS_TEMP/etc/default/FIRSTBOOT
+	fi
+
+	# mkimage tool
+	cp $UTILS_DIR/mkimage-$DISTRIB_ARCH $ROOTFS_TEMP/usr/local/bin/mkimage
+
+	## script executing on chroot
+	cp -r scripts/chroot-scripts/RUNME.sh $ROOTFS_TEMP/
+
+	echo
+	echo "NOTE: ENTER CHROOT AND EXECUTE SCRIPT 'RUNME.sh'."
+	echo
+	mount_chroot "$ROOTFS_TEMP"
+	chroot $ROOTFS_TEMP/ bash "/RUNME.sh"
+
+	## Logo
+	cp archives/logo/${VENDOR}/logo.img $BUILD_IMAGES
+
+	## Unmount to get the rootfs.img
+	sync
+	umount_chroot "$ROOTFS_TEMP"
+
+	prepare_partitions
+
+	return $ret
+}
+

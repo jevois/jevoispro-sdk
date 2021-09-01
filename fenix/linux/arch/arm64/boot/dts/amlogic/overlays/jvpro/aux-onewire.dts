@@ -1,0 +1,16 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable OneWire interface on AUX connector, pin 3 (connected to GPIOH_6)
+//
+
+/ {
+	fragment@0 {
+		target = <&onewire>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

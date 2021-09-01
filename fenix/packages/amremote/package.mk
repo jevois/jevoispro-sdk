@@ -1,0 +1,30 @@
+PKG_NAME="amremote"
+PKG_VERSION="34058bf77fe9c7c42b9af86a46852dd57d865581"
+PKG_SHA256="4887bd23bb009b5b95cf01b184af98c518e2501c7a7deb5239924677d8463663"
+PKG_SOURCE_DIR="amremote-${PKG_VERSION}*"
+PKG_SITE="$GITHUB_URL/numbqq/amremote"
+PKG_URL="$PKG_SITE/archive/$PKG_VERSION.tar.gz"
+[[ $DOWNLOAD_MIRROR == china ]] && \
+{
+PKG_SITE="$GITEE_URL/numbqq/amremote"
+PKG_URL="$PKG_SITE/repository/archive/$PKG_VERSION.tar.gz"
+PKG_SOURCE_DIR="$PKG_NAME"
+PKG_SHA256="3b41f2fa3ef0295305a3f8d5c230b4fd0b5012ca75c973f2c06ae08469322132"
+}
+PKG_ARCH="arm aarch64"
+PKG_LICENSE="GPL"
+PKG_SHORTDESC="Amlogic Amremote package"
+PKG_SOURCE_NAME="amremote-${PKG_VERSION}.tar.gz"
+PKG_NEED_BUILD="YES"
+
+
+make_target() {
+	:
+}
+
+makeinstall_target() {
+	mkdir -p $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/amremote
+	# Remove old debs
+	rm -rf $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/amremote/*
+	cp ${DISTRIB_RELEASE}/${DISTRIB_ARCH}/*.deb $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/amremote
+}

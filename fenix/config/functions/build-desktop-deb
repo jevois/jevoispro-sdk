@@ -1,0 +1,224 @@
+# Funcions:
+# build_desktop_deb
+# desktop_postinstall
+
+## Build desktop deb package
+build_desktop_deb() {
+
+	if [ "$DISTRIB_TYPE" == "server" ] || [ "$DISTRIB_TYPE" == "minimal" ]; then
+		info_msg "Ignore build desktop package for server/minimal images."
+		return 0
+	fi
+
+	desktop_deb_dependencies=$(echo $PACKAGE_LIST_DESKTOP)
+	desktop_deb_dependencies=${desktop_deb_dependencies// /,}
+
+	local pkgname="${FENIX_DESKTOP_DEB}"
+	local pkgdir="$BUILD_IMAGES/.tmp/${pkgname}_${VERSION}_all"
+	rm -rf $pkgdir
+	mkdir -p $pkgdir/DEBIAN
+
+	info_msg "Build desktop deb..."
+
+	cat <<-EOF > $pkgdir/DEBIAN/control
+	Package: $pkgname
+	Version: $VERSION
+	Architecture: all
+	Maintainer: Khadas <hello@khadas.com>
+	Installed-Size: 1
+	Section: xorg
+	Priority: optional
+	Recommends: ${desktop_deb_dependencies}
+	Provides: fenix-desktop-package
+	Description: Fenix desktop for ${DISTRIBUTION}-${DISTRIB_RELEASE} on $KHADAS_BOARD
+	EOF
+
+	# Set up pre install script
+	cat <<-EOF > $pkgdir/DEBIAN/preinst
+	#!/bin/sh
+
+	exit 0
+	EOF
+
+	chmod 755 $pkgdir/DEBIAN/preinst
+
+	# Set up post remove script
+	cat <<-EOF > $pkgdir/DEBIAN/postrm
+	#!/bin/sh
+	exit 0
+	EOF
+
+	chmod 755 $pkgdir/DEBIAN/postrm
+
+	# Set up post install script
+	cat <<-EOF > $pkgdir/DEBIAN/postinst
+	#!/bin/bash
+
+	# Overwrite Chromium default configuration
+	if [ -d /etc/chromium-browser/ ]; then ln -sf /etc/fenix/chromium.conf /etc/chromium-browser/default; fi
+	if [ -d /etc/chromium.d/ ]; then ln -sf /etc/fenix/chromium.conf /etc/chromium.d/default-flags; fi
+
+	# Get accelerated back for chromium
+	# Ubuntu
+	if [ -d /usr/lib/chromium-browser/ ]; then
+		ln -fs /usr/lib/aarch64-linux-gnu/libGLESv2.so /usr/lib/chromium-browser/libGLESv2.so
+		ln -fs /usr/lib/aarch64-linux-gnu/libEGL.so /usr/lib/chromium-browser/libEGL.so
+	fi
+	# Debian
+	if [ -d /usr/lib/chromium/ ]; then
+		ln -fs /usr/lib/aarch64-linux-gnu/libGLESv2.so /usr/lib/chromium/libGLESv2.so
+		ln -fs /usr/lib/aarch64-linux-gnu/libEGL.so /usr/lib/chromium/libEGL.so
+	fi
+
+	# exit if we are running chroot
+	if [ "\$(stat -c %d:%i /)" == "\$(stat -c %d:%i /proc/1/root/.)" ]; then
+		# Updata default configuration
+		[ -d /etc/skel/.config ] && cp -arf /etc/skel/.config /home/khadas
+		[ -d /etc/skel/.local ] && cp -arf /etc/skel/.local /home/khadas
+		chown khadas:khadas /home/khadas/.* -R
+	fi
+
+	if [ "\$(stat -c %d:%i /)" != "\$(stat -c %d:%i /proc/1/root/.)" ]; then
+		# In chroot
+		if [ -f /boot/.next ]; then
+			IS_MAINLINE_KERNEL="yes"
+		fi
+	else
+		linux_ver=\`uname -r\`
+		if linux-version compare \$linux_ver ge 4.12; then
+			IS_MAINLINE_KERNEL="yes"
+		fi
+	fi
+
+	if [ "\$IS_MAINLINE_KERNEL" == "yes" ]; then
+		[ -f /lib/systemd/system/hdmi_resolution.service ] && rm /lib/systemd/system/hdmi_resolution.service
+		[ -f /home/khadas/.local/share/applications/cpu-frequency-setting.desktop ] && rm /home/khadas/.local/share/applications/cpu-frequency-setting.desktop
+#		[ -f /home/khadas/.local/share/applications/fan-settings.desktop ] && rm /home/khadas/.local/share/applications/fan-settings.desktop
+		[ -f /home/khadas/.local/share/applications/hdmi-resolution-settings.desktop ] && rm /home/khadas/.local/share/applications/hdmi-resolution-settings.desktop
+		[ -f /home/khadas/.local/share/applications/wol-settings.desktop ] && rm /home/khadas/.local/share/applications/wol-settings.desktop
+	else
+		systemctl --no-reload enable hdmi_resolution.service >/dev/null 2>&1
+	fi
+
+	# For GNOME desktop
+	# Set default desktop manager
+	# Mainline kernel using gdm3
+	# Legacy kernel using lightdm
+	if which gnome-session > /dev/null; then
+		if which gdm3 > /dev/null; then
+			if [ -f /boot/.next ]; then
+				DM=gdm3
+			else
+				DM=lightdm
+			fi
+			debconf-set-selections <<-EOT
+			gdm3    shared/default-x-display-manager        select  "\${DM}"
+			lightdm shared/default-x-display-manager        select  "\${DM}"
+			EOT
+
+			echo "/usr/sbin/\${DM}" > /etc/X11/default-display-manager
+			DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true dpkg-reconfigure "\${DM}"
+		fi
+	fi
+
+	exit 0
+	EOF
+
+	chmod 755 $pkgdir/DEBIAN/postinst
+
+	# Install default configuration for Chromium
+	mkdir -p $pkgdir/etc/fenix
+	cp $ROOT/archives/filesystem/blobs/desktop/chromium.conf $pkgdir/etc/fenix
+
+	# Remove Chromium configuration gl for Amlogic platform
+	if [ "$VENDOR" == "Amlogic" ]; then
+		sed -i 's/export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --use-gl=egl --enable-remote-extensions"/#export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --use-gl=egl --enable-remote-extensions"/g' \
+			$pkgdir/etc/fenix/chromium.conf
+	fi
+
+	# Install default desktop settings
+	if [ -d $ROOT/archives/filesystem/blobs/desktop/${DISTRIB_TYPE} ]; then
+		mkdir -p $pkgdir/etc/skel
+		cp -R $ROOT/archives/filesystem/blobs/desktop/${DISTRIB_TYPE}/skel/. $pkgdir/etc/skel
+	fi
+
+	# Install icons
+	mkdir -p $pkgdir/etc/fenix/icons
+	cp $ROOT/archives/filesystem/blobs/desktop/icons/* $pkgdir/etc/fenix/icons
+
+	if [ "$VENDOR" == "Amlogic" ]; then
+		# Remove QT5 player for other platform
+		rm -f $pkgdir/etc/skel/.local/share/applications/qt5.desktop
+		rm -f $pkgdir/usr/local/bin/qt5_player
+		if [ "$KHADAS_BOARD" == "VIM1" ] || [ "$KHADAS_BOARD" == "VIM2" ]; then
+			rm -rf $pkgdir/etc/skel/.local/share/applications/xfce-usb3-pcie-settings.desktop
+			rm -rf $pkgdir/etc/skel/.local/share/applications/usb3-pcie-settings.desktop
+			rm -rf $pkgdir/etc/skel/.local/share/applications/cpu-frequency-setting.desktop
+		fi
+		if [ "$LINUX" == "mainline" ]; then
+			rm -rf $pkgdir/lib/systemd/system/hdmi_resolution.service
+			rm -rf $pkgdir/etc/skel/.local/share/applications/cpu-frequency-setting.desktop
+#			rm -rf $pkgdir/etc/skel/.local/share/applications/fan-settings.desktop
+			rm -rf $pkgdir/etc/skel/.local/share/applications/hdmi-resolution-settings.desktop
+			rm -rf $pkgdir/etc/skel/.local/share/applications/wol-settings.desktop
+		fi
+	elif [ "$VENDOR" == "Rockchip" ]; then
+		# Remove unused menus for Rockchip platform
+		rm -rf $pkgdir/etc/skel/.local/share/applications/xfce-hdmi-resolution-settings.desktop
+		rm -rf $pkgdir/etc/skel/.local/share/applications/hdmi-resolution-settings.desktop
+		rm -rf $pkgdir/etc/skel/.local/share/applications/cpu-frequency-setting.desktop
+	fi
+
+	# Install xserver configurations
+	mkdir -p $pkgdir/etc/X11/xorg.conf.d
+	if [ "$LINUX" == "mainline" ] && [ "$DISTRIB_RELEASE" != "bionic" ]; then
+		if [ -f $ROOT/archives/filesystem/blobs/desktop/xorg/${KHADAS_BOARD}/${MODESETTING_CONF} ]; then
+			cp $ROOT/archives/filesystem/blobs/desktop/xorg/${KHADAS_BOARD}/${MODESETTING_CONF} $pkgdir/etc/X11/xorg.conf.d
+		fi
+	elif [ "$LINUX" != "mainline" ] && [ "$DISTRIBUTION" == "Ubuntu" ]; then
+		if [ -f $ROOT/archives/filesystem/blobs/desktop/xorg/${KHADAS_BOARD}/${MODESETTING_CONF} ]; then
+			cp $ROOT/archives/filesystem/blobs/desktop/xorg/${KHADAS_BOARD}/${MODESETTING_CONF} $pkgdir/etc/X11/xorg.conf.d
+			if [ "$DISTRIB_RELEASE" == "bionic" ]; then
+				sed -i 's/exa/glamor/g' $pkgdir/etc/X11/xorg.conf.d/${MODESETTING_CONF}
+			fi
+		fi
+	fi
+
+	# Add dependencies file
+	cat <<-EOF > $pkgdir/etc/fenix-desktop-dependencis
+	FENIX_DESKTOP_DEPENDENCIES="$(echo $PACKAGE_LIST_DESKTOP)"
+	EOF
+
+	# Create desktop deb file
+	info_msg "Building package: $pkgname"
+	fakeroot dpkg-deb -b $pkgdir ${pkgdir}.deb
+	mkdir -p $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}
+	cp ${pkgdir}.deb $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}
+	# Cleanup
+	rm -rf ${pkgdir}.deb
+	rm -rf $pkgdir
+}
+
+desktop_postinstall() {
+	if [ "$DISTRIB_TYPE" == "xfce" ]; then
+		if [ -f $ROOTFS_TEMP/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml ]; then
+			if [ "$LINUX" == "mainline" ]; then
+				sed -i 's/<property name="box_move" type="bool" value=".*/<property name="box_move" type="bool" value="false"\/>/g' \
+					$ROOTFS_TEMP/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+				sed -i 's/<property name="box_resize" type="bool" value=".*/<property name="box_resize" type="bool" value="false"\/>/g' \
+					$ROOTFS_TEMP/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+			else
+				sed 's/name="use_compositing" type="bool" value="true"/name="use_compositing" type="bool" value="false"/' -i \
+					$ROOTFS_TEMP/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+			fi
+		fi
+	fi
+
+	# Fixup Ubuntu Lxde lightdm background
+	if [ "$DISTRIBUTION" == "Ubuntu" ] && [ "$DISTRIB_TYPE" == "lxde" ]; then
+		sed -i 's/#background=/background=\/etc\/alternatives\/desktop-background/g' $ROOTFS_TEMP/etc/lightdm/lightdm-gtk-greeter.conf
+		if [ "$VENDOR" == "Rockchip" ]; then
+			echo "@xrandr --output DP-1 --auto --output HDMI-1 --auto --same-as DP-1" >> $ROOTFS_TEMP/etc/xdg/lxsession/LXDE/autostart
+		fi
+	fi
+}

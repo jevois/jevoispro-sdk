@@ -1,0 +1,430 @@
+##################################### Path ###########################################
+## Root directory
+#ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
+ROOT=$(realpath "${BASH_SOURCE%/*}"/..)
+## Config directory
+CONFIG="$ROOT/config"
+## Board configuratios directory
+BOARD_CONFIG="$CONFIG/boards"
+## Boot scripts
+BOOT_SCRIPTS="$CONFIG/bootscripts"
+## Boot environment
+BOOT_ENV="$CONFIG/bootenv"
+## Download packages directory
+[ "$DOWNLOAD_PKG_DIR" ] || \
+DOWNLOAD_PKG_DIR="$ROOT/downloads"
+DOWNLOAD_PKG_DIR=$(realpath "$DOWNLOAD_PKG_DIR")
+## Packages directory
+PKGS_DIR="$ROOT/packages"
+## Packages build directory
+[ "$BUILD" ] || \
+BUILD="$ROOT/build"
+
+## Build pid
+[ "$FPID" ] || \
+    FPID="$BUILD"/build.pid
+
+[ "$LINUX_VENDOR_DIR" ] || \
+LINUX_VENDOR_DIR="$BUILD"/linux
+
+[ "$UBOOT_VENDOR_DIR" ] || \
+UBOOT_VENDOR_DIR="$BUILD"/u-boot
+
+# JEVOIS: copy u-boot and linux from root, as opposed to pulling them from github:
+if [ ! -d "$LINUX_VENDOR_DIR" ]; then
+   /bin/cp -ar "${ROOT}/linux" "${BUILD}/"
+fi
+
+if [ ! -d "$UBOOT_VENDOR_DIR" ]; then
+   /bin/cp -ar "${ROOT}/u-boot" "${BUILD}/"
+fi
+
+
+BUILD=$(realpath "$BUILD")
+## ccache build directory
+[ "$CCACHE_DIR" ] || \
+export CCACHE_DIR="$BUILD/ccache"
+## Build images
+[ "$BUILD_IMAGES" ] || \
+BUILD_IMAGES="$BUILD/images"
+## Build debs
+BUILD_DEBS="$BUILD_IMAGES/debs"
+## Rootfs mount point
+ROOTFS="$BUILD_IMAGES/rootfs"
+## Rootfs temp file directory
+ROOTFS_TEMP="$BUILD_IMAGES/.tmp/rootfs-${KHADAS_BOARD}-${DISTRIB_RELEASE}-${DISTRIB_TYPE}"
+## Toolchains
+TOOLCHAINS="$BUILD/toolchains"
+
+UTILS_DIR="$BUILD"/utils-*
+UPGRADE_DIR="$BUILD"/images_upgrade-*
+
+sudo="sudo -E"
+[ "$UID" = 0 -o "$USER" = "root" ] && sudo=
+
+echo "[i] FENIX (${0#*/}) BUILD: $BUILD | DL: $DOWNLOAD_PKG_DIR | sudo: $sudo"
+
+##################################### Configurations ##################################
+MAKE_PARAMS="BUILD_TYPE DOWNLOAD_MIRROR NO_CCACHE COMPRESS_IMAGE INSTALL_TYPE_RAW \
+			 CLONE_FULL_COMMIT_LOG FORCE_BUILD_KERNEL_DEB SKIP_ROOTFS_CACHE_DOWNLOAD \
+			 FORCE_CREATE_ROOTFS_CACHE CREATE_ROOTFS_CACHE_ONLY"
+
+## Available values
+BUILD_TYPE_VALUES="develop | release"
+DOWNLOAD_MIRROR_VALUES="default | china"
+NO_CCACHE_VALUES="no | yes"
+COMPRESS_IMAGE_VALUES="no | yes"
+INSTALL_TYPE_RAW_VALUES="no | yes"
+CLONE_FULL_COMMIT_LOG_VALUES="no | yes"
+FORCE_BUILD_KERNEL_DEB_VALUES="no | yes"
+SKIP_ROOTFS_CACHE_DOWNLOAD_VALUES="no | yes"
+FORCE_CREATE_ROOTFS_CACHE_VALUES="no | yes"
+CREATE_ROOTFS_CACHE_ONLY_VALUES="no | yes"
+
+## Default values
+[[ -z $NO_CCACHE ]] && NO_CCACHE=no
+[[ -z $BUILD_TYPE ]] && BUILD_TYPE=develop
+[[ -z $DOWNLOAD_MIRROR ]] && DOWNLOAD_MIRROR=default
+[[ -z $COMPRESS_IMAGE ]] && COMPRESS_IMAGE=no
+[[ -z $INSTALL_TYPE_RAW ]] && INSTALL_TYPE_RAW=no
+[[ -z $CLONE_FULL_COMMIT_LOG ]] && CLONE_FULL_COMMIT_LOG=no
+[[ -z $FORCE_BUILD_KERNEL_DEB ]] && FORCE_BUILD_KERNEL_DEB=no
+[[ -z $SKIP_ROOTFS_CACHE_DOWNLOAD ]] && SKIP_ROOTFS_CACHE_DOWNLOAD=no
+[[ -z $FORCE_CREATE_ROOTFS_CACHE ]] && FORCE_CREATE_ROOTFS_CACHE=no
+[[ -z $CREATE_ROOTFS_CACHE_ONLY ]] && CREATE_ROOTFS_CACHE_ONLY=no
+
+
+GITHUB_URL="https://github.com"
+GITEE_URL="https://gitee.com"
+FENIX_BRANCH="master"
+[[ "$CLONE_FULL_COMMIT_LOG" == "no" ]] && GIT_CLONE_OPTIONS="--depth=1"
+
+ROOTFSCACHE_VERSION=7
+DATE=$(date +%F | sed 's/-//g')
+IMAGE_VERSION="V${VERSION}-${DATE:2}"
+[[ "$BUILD_TYPE" != "release" ]] && IMAGE_VERSION=${IMAGE_VERSION}-develop
+
+NR_JOBS_MAX=100
+NR_CPUS=$(grep -c processor /proc/cpuinfo)
+if [ ${NR_CPUS} -le ${NR_JOBS_MAX} ]; then
+	NR_JOBS=${NR_CPUS}
+else
+	NR_JOBS=${NR_JOBS_MAX}
+fi
+
+## Enable ccache by default
+if [ "$NO_CCACHE" != "yes" ]; then
+	CCACHE=ccache
+	export PATH="/usr/lib/ccache:$PATH"
+else
+	[ "$CCACHE_QUIET" ] || \
+	echo "Disable CCACHE ..."
+	CCACHE=""
+fi
+
+if [ "$LINUX" == "mainline" ]; then
+	MAINLINE_LINUX_VER=$(grep "PKG_VERSION=" $PKGS_DIR/linux-mainline/package.mk | awk -F '"' '{print $2}')
+fi
+
+if [ "$UBOOT" == "mainline" ]; then
+	MAINLINE_UBOOT_VER=$(grep "PKG_VERSION=" $PKGS_DIR/u-boot-mainline/package.mk | awk -F '"' '{print $2}')
+	[[ ${#MAINLINE_UBOOT_VER} -eq 40 ]] && MAINLINE_UBOOT_VER=${MAINLINE_UBOOT_VER:0:7}
+	LINUX_UBOOT_DEB="linux-u-boot-${KHADAS_BOARD,,}-mainline"
+else
+	LINUX_UBOOT_DEB="linux-u-boot-${KHADAS_BOARD,,}-vendor"
+fi
+
+UBOOT_VER=${UBOOT/mainline/$MAINLINE_UBOOT_VER}
+
+IMAGE_FILE_NAME="${KHADAS_BOARD}_${DISTRIBUTION}-${DISTRIB_TYPE}-${DISTRIB_RELEASE}_Linux-${LINUX/mainline/$MAINLINE_LINUX_VER}_${DISTRIB_ARCH}_${INSTALL_TYPE}_${IMAGE_VERSION}.img"
+IMAGE_FILE_NAME_RAW=${IMAGE_FILE_NAME:0:-4}.raw.img
+[[ "$INSTALL_TYPE_RAW" == "yes" ]] && IMAGE_FILE_NAME=$IMAGE_FILE_NAME_RAW
+LINUX_IMAGE_DEB="linux-image-${VENDOR,,}-${LINUX}"
+LINUX_FIRMWARE_DEB="linux-firmware-image-${VENDOR,,}-${LINUX}"
+
+LINUX_BOARD_DEB="linux-board-package-${DISTRIB_RELEASE,,}-${KHADAS_BOARD,,}"
+
+FENIX_UPDATER_DEB="fenix-updater-package-${DISTRIB_RELEASE,,}-${KHADAS_BOARD,,}-${LINUX}"
+
+if [ "$DISTRIB_TYPE" != "server" ]; then
+	FENIX_DESKTOP_DEB="fenix-${DISTRIBUTION,,}-${DISTRIB_RELEASE}-${DISTRIB_TYPE}-desktop"
+fi
+
+INITRD_ARCH=arm64
+QEMU_BINARY="qemu-aarch64-static"
+
+DEST_LANG="en_US.UTF-8"
+CONSOLE_CHAR="UTF-8"
+
+# Give the option to configure DNS server used in the chroot during the build process
+NAMESERVER="1.0.0.1" # default is cloudflare alternate
+
+
+ROOTFS_TYPE="ext4"
+BOOTFS_TYPE="fat"
+
+if [ "$BUILD_TYPE" == "release" ]; then
+	TZDATA="Etc/UTC" # Use 'Etc/UTC' when release images.
+else
+	TZDATA=`cat /etc/timezone` # Timezone for target is taken from host or defined here.
+fi
+
+# Non-interactive mode auto detect
+case $(readlink /proc/$$/fd/1) in
+    /dev/tty*|/dev/pts*)
+    ;;
+    *)
+    NO_ASK=1
+    echo "[i] no ask mode was auto detected"
+    ;;
+esac
+
+[ "$NO_ASK" ] && {
+    export NO_ASK=1
+    export NO_COLOR=1
+    export NO_PROGRESS=1
+    export DEBIAN_FRONTEND=noninteractive
+    export DEBIAN_PRIORITY=critical
+    export WGETRC=$(realpath "$CONFIG")/etc/wgetrc_minimal_progress
+    echo "[i] no ask ( noninteractive ) mode activated"
+}
+
+# All command-line software which outputs text with ANSI color added should
+# check for the presence of a NO_COLOR environment variable that, when
+# present (regardless of its value), prevents the addition of ANSI color.
+# https://no-color.org/ ;-)
+#
+
+# USAGE: NO_COLOR=1 make
+[ "$NO_COLOR" ] && \
+unset BLACK BOLDBLACK RED BOLDRED GREEN BOLDGREEN YELLOW BOLDYELLOW BLUE \
+    BOLDBLUE MAGENTA BOLDMAGENTA CYAN BOLDCYAN WHITE BOLDWHITE ENDCOLOR
+
+[ "$NO_COLOR" ] || {
+## Define colors
+BLACK="\e[0;30m"
+BOLDBLACK="\e[1;30m"
+RED="\e[0;31m"
+BOLDRED="\e[1;31m"
+GREEN="\e[0;32m"
+BOLDGREEN="\e[1;32m"
+YELLOW="\e[0;33m"
+BOLDYELLOW="\e[1;33m"
+BLUE="\e[0;34m"
+BOLDBLUE="\e[1;34m"
+MAGENTA="\e[0;35m"
+BOLDMAGENTA="\e[1;35m"
+CYAN="\e[0;36m"
+BOLDCYAN="\e[1;36m"
+WHITE="\e[0;37m"
+BOLDWHITE="\e[1;37m"
+ENDCOLOR="\e[0m"
+}
+
+##
+ERROR="${RED}Error:${ENDCOLOR}"
+WARNING="${YELLOW}Warning:${ENDCOLOR}"
+INFO="${GREEN}Info:${ENDCOLOR}"
+
+################################### Packages ############################################
+# Base system dependencies
+DEBOOTSTRAP_LIST="locales gnupg ifupdown apt-utils apt-transport-https ca-certificates bzip2 console-setup \
+	cpio cron dbus init initramfs-tools iputils-ping isc-dhcp-client kmod less libpam-systemd linux-base \
+	logrotate netbase netcat-openbsd systemd sudo ucf udev whiptail wireless-regdb crda dmsetup \
+	rsync tzdata rng-tools fdisk curl"
+
+if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
+	DEBOOTSTRAP_LIST+=" libgtk2.0-bin"
+fi
+
+PACKAGE_LIST_EXCLUDE="rsyslog"
+
+DEBOOTSTRAP_LIST=$(echo $DEBOOTSTRAP_LIST | sed -e 's,\\[trn],,g')
+
+# Essential packages
+PACKAGE_LIST="bc cpufrequtils device-tree-compiler fping fake-hwclock psmisc chrony parted dialog \
+	ncurses-term sysfsutils toilet figlet u-boot-tools usbutils openssh-server nocache debconf-utils \
+	python3-apt make gcc libc6-dev plymouth plymouth-themes"
+
+# Non-essential packages
+PACKAGE_LIST_ADDITIONAL="network-manager wireless-tools lsof htop mmc-utils wget nano net-tools \
+	resolvconf iozone3 jq libcrack2 cracklib-runtime curl rfkill bison flex libssl-dev"
+
+# JEVOIS: removed sysstat above, it pollutes the log and we have our own usage stats already
+
+if [[ "$DISTRIB_TYPE" != "minimal" ]]; then
+
+	PACKAGE_LIST+=" bridge-utils build-essential fbset iw wpasupplicant unattended-upgrades unicode-data \
+		expect iptables mc abootimg libc6 libdrm2 libgcc1 libstdc++6 libx11-6 libx11-xcb1 libxcb-dri2-0 \
+		libxcb1 html2text automake libwrap0-dev libnl-3-dev libnl-genl-3-dev \
+		keyboard-configuration rsyslog"
+
+	PACKAGE_LIST_ADDITIONAL+=" alsa-utils btrfs-progs dosfstools hddtemp iotop stress sysbench screen \
+		ntfs-3g vim pciutils evtest pv libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude \
+		dnsutils f3 haveged hdparm rfkill vlan bash-completion hostapd git ethtool unzip ifenslave lirc \
+		iperf3 software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping \
+		bluetooth bluez bluez-tools watchdog i2c-tools qrencode clinfo ocl-icd-libopencl1 libatlas3-base \
+		p7zip p7zip-full lrzip lzip lzop ncompress unar zstd edid-decode libgtk-3-0 dnsmasq-base ppp \
+		modemmanager mobile-broadband-provider-info zlib1g-dev"
+fi
+
+PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils xterm thunar-volman \
+	network-manager-gnome network-manager-openvpn-gnome gnome-keyring gcr libgck-1-0 p11-kit pasystray pavucontrol pulseaudio \
+	pavumeter pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri gparted synaptic apt-xapian-index \
+	policykit-1 profile-sync-daemon gnome-orca numix-gtk-theme gnome-system-tools lightdm lightdm-gtk-greeter gufw yad zenity guvcview onboard"
+
+PACKAGE_LIST_OFFICE="gedit galculator hexchat mpv gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf \
+	thunderbird system-config-printer-common system-config-printer paprefs dbus-x11 tango-icon-theme libreoffice libreoffice-style-tango fbi \
+	cups-pk-helper cups geany atril xarchiver meld remmina kazam avahi-daemon transmission"
+
+PACKAGE_LIST_XSERVER="libunwind8 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xf86dri0 libxcb-xkb1 libxcb-xv0 \
+	libpixman-1-dev x11proto-core-dev x11proto-input-dev x11proto-xext-dev x11proto-video-dev x11proto-randr-dev x11proto-render-dev x11proto-dri2-dev \
+	x11proto-gl-dev x11proto-fonts-dev x11proto-xinerama-dev x11proto-kb-dev x11proto-xf86dri-dev x11proto-resource-dev x11proto-scrnsaver-dev \
+	x11proto-xf86bigfont-dev x11proto-dri3-dev x11proto-present-dev libxfont-dev libxkbfile-dev libpciaccess-dev"
+
+PACKAGE_LIST_GSTREAMER="gstreamer1.0-libav gstreamer1.0-plugins-bad gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-alsa \
+	gstreamer1.0-plugins-good libconfig++9v5 libconfig9"
+
+PACKAGE_LIST_QT="libqt5opengl5 libqt5qml5 libqt5quick5 libqt5widgets5 libqt5gui5 libqt5core5a qml-module-qtquick2 \
+	libqt5multimedia5 libqt5multimedia5-plugins qml-module-qt-labs-folderlistmodel qml-module-qtmultimedia \
+	libqt5multimediawidgets5 qtbase5-dev libglib2.0-dev libpulse-dev"
+
+# Packages to compile OpenCV customized for JeVois.
+
+PACKAGE_LIST_JEVOIS_COMPILE_OPENCV="build-essential gcc-10 g++-10 gfortran-10 python2.7-dev cmake libboost-all-dev \
+    autoconf libeigen3-dev libgtk2.0-dev libdc1394-22 libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev \
+    libavcodec-dev libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    libv4l-dev libtbb2 libtbb-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev \
+    libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qt5-default python3-dev python3-numpy \
+    python3-pip libgtk-3-dev libatlas-base-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
+    libtesseract-dev tesseract-ocr-all libleptonica-dev liblapacke-dev libavresample-dev qt5-default \
+    libopenblas-dev libopenblas-openmp-dev pylint libopenjp2-7-dev libopenjpip7 libopenjp3d7 libopenjp2-tools \
+    libopenjp3d-tools libcaffe-cpu-dev gdb dkms"
+
+# libqt4-dev
+
+# Packages to compile JeVois core software.
+PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf libeigen3-dev libgtk2.0-dev \
+    libdc1394-22 libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev \
+    libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb2 libtbb-dev \
+    libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev \
+    libxvidcore-dev x264 v4l-utils unzip qt5-default python3-numpy python3-pip libgtk-3-dev libatlas-base-dev \
+    libturbojpeg checkinstall protobuf-compiler libprotobuf-dev libprotoc-dev libtesseract-dev tesseract-ocr-all \
+    libleptonica-dev checkinstall git build-essential cmake mercurial doxygen-gui graphviz libboost-all-dev \
+    libjpeg-turbo8-dev autoconf libeigen3-dev screen gawk u-boot-tools libgtk2.0-dev pkg-config libdc1394-22 \
+    libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev libxine2-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb2 libtbb-dev libfaac-dev \
+    libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev libxvidcore-dev x264 \
+    v4l-utils unzip qt5-default python3-dev libgtk-3-dev libatlas-base-dev libturbojpeg libgles2-mesa \
+    libgles2-mesa-dev ncftp flex libturbojpeg-dev u-boot-tools dpkg-dev flex curl wput libdmtx-dev qt5-default \
+    subversion python3-scipy emacs tree \
+    libflac-dev libogg-dev libvorbis-dev libopenal-dev libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev \
+    libglm-dev libusb-dev libsdl2-dev"
+
+#    libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libsdl2-net-dev"
+#lsb lib32stdc++6 libqt4-dev
+#    libglfw3-dev
+
+PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev \
+     python3-pil python3-tflite-runtime python3-pycoral git"
+
+# Pre-install jevois and jevoisbase:
+PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform jevoispro-fan"
+
+PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACKAGE_LIST_JEVOIS_COMPILE} \
+    ${PACKAGE_LIST_JEVOIS_SOFTWARE}"
+
+case $DISTRIB_TYPE in
+	xfce)
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_OFFICE"
+		PACKAGE_LIST_DESKTOP+=" xfce4 lxtask xfce4-screenshooter xfce4-notifyd xfce4-terminal desktop-base software-properties-gtk thunar-archive-plugin"
+		[[ $DISTRIBUTION == Ubuntu ]] && PACKAGE_LIST_DESKTOP+=" update-manager"
+	;;
+	lxde)
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_OFFICE"
+		PACKAGE_LIST_DESKTOP+=" lxde lxlauncher lxmusic lxsession-default-apps lxsession-logout lxshortcut lxtask obconf \
+			xfce4-power-manager-plugins lxde-common desktop-base"
+	;;
+	gnome)
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_OFFICE"
+		PACKAGE_LIST_DESKTOP+=" desktop-base software-properties-gtk gnome-terminal gnome-shell-extensions gnome-tweaks gnome-screenshot"
+		[[ $DISTRIB_RELEASE == focal ]] && PACKAGE_LIST_DESKTOP+=" yaru-theme-gtk yaru-theme-icon yaru-theme-sound"
+		[[ $DISTRIBUTION == Ubuntu ]] && PACKAGE_LIST_DESKTOP+=" ubuntu-desktop update-manager"
+	;;
+esac
+
+case $DISTRIB_RELEASE in
+	buster)
+		DEBOOTSTRAP_COMPONENTS="main"
+		[[ "$DISTRIB_TYPE" != "minimal" ]] && PACKAGE_LIST_RELEASE="man-db kbd gnupg2 dirmngr networkd-dispatcher command-not-found"
+		PACKAGE_LIST_KODI="libglu1 libmicrohttpd12 libpcrecpp0v5 libssh-4 libtag1v5 libtinyxml2.6.2v5 libva-drm2 libcurl4"
+		PACKAGE_LIST_QT+=" libqt5multimediaquick5"
+		PACKAGE_LIST_MESA="libglvnd-dev libx11-dev"
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_GSTREAMER $PACKAGE_LIST_KODI $PACKAGE_LIST_MESA"
+		PACKAGE_LIST_DESKTOP+=" numix-icon-theme chromium mirage"
+	;;
+	bionic)
+		DEBOOTSTRAP_COMPONENTS="main,universe"
+		[[ "$DISTRIB_TYPE" != "minimal" ]] && PACKAGE_LIST_RELEASE="man-db kbd gnupg2 dirmngr networkd-dispatcher libjpeg9 command-not-found"
+		PACKAGE_LIST_QT+=" libqt5multimediaquick-p5 libqgsttools-p1"
+		PACKAGE_LIST_OFFICE+=" mirage"
+		PACKAGE_LIST_KODI="mesa-utils libglu1 libpcrecpp0v5 libssh-4 libtag1v5 libtinyxml2.6.2v5 libcurl4 libcrossguid0 libmariadbclient18 libmicrohttpd12 \
+			libavahi-compat-libdnssd-dev libcec4 libfstrcmp0 libnfs11 fonts-liberation python-bluez python-pil python-simplejson libaacs0 fonts-dejavu-core libao-dev"
+		PACKAGE_LIST_SERVER_KODI="libao4 libwayland-cursor0 libavahi-compat-libdnssd-dev libass9 libavahi-client3 libavahi-common3 libbluray2 libcdio17 libcec4 \
+			libfreetype6 libfstrcmp0 libinput10 liblcms2-2 libmicrohttpd12 libnfs11 libpcrecpp0v5 libpulse0 libsmbclient libtag1v5 libtinyxml2.6.2v5 libxkbcommon0 \
+			libxslt1.1 mesa-utils x11-utils fonts-liberation fonts-dejavu-core python-bluez python-pil python-simplejson libgif7 libvorbisfile3 libaacs0 libgnutls30 \
+			libyajl2 libsndio6.1 libcrossguid0 libao-dev"
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_XSERVER $PACKAGE_LIST_GSTREAMER $PACKAGE_LIST_QT $PACKAGE_LIST_KODI"
+		PACKAGE_LIST_DESKTOP+=" chromium-browser xserver-xorg-input-all firefox pulseaudio-module-gconf libgnome2-perl language-selector-gnome"
+	;;
+	focal)
+		DEBOOTSTRAP_COMPONENTS="main,universe"
+		[[ "$DISTRIB_TYPE" != "minimal" ]] && PACKAGE_LIST_RELEASE="man-db kbd gnupg2 dirmngr networkd-dispatcher libjpeg9 command-not-found"
+		PACKAGE_LIST_KODI="mesa-utils libglu1 libpcrecpp0v5 libssh-4 libtag1v5 libtinyxml2.6.2v5 libcurl4 libcrossguid0  libmicrohttpd12 libavahi-compat-libdnssd-dev libcec4 \
+			libfstrcmp0 libnfs13 fonts-liberation python-bluez python-pil python-simplejson libaacs0 fonts-dejavu-core libao-dev libpython2.7 libpython2.7-minimal libpython2.7-stdlib x11-utils"
+		PACKAGE_LIST_SERVER_KODI="libao4 libwayland-cursor0 libavahi-compat-libdnssd-dev libass9 libavahi-client3 libavahi-common3 libbluray2 libcdio18 libcec4 \
+			libfreetype6 libfstrcmp0 libinput10 liblcms2-2 libmicrohttpd12 libnfs13 libpcrecpp0v5 libpulse0 libsmbclient libtag1v5 libtinyxml2.6.2v5 libxkbcommon0 \
+			libxslt1.1 mesa-utils x11-utils fonts-liberation fonts-dejavu-core python-bluez python-pil python-simplejson libgif7 libvorbisfile3 libaacs0 libgnutls30 \
+			libyajl2 libsndio7.0 libcrossguid0 libao-dev libpython2.7"
+		PACKAGE_LIST_MESA="libclang-cpp11 libclc-r600 libclc-amdgcn libllvm10"
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_XSERVER $PACKAGE_LIST_GSTREAMER $PACKAGE_LIST_KODI $PACKAGE_LIST_MESA"
+		PACKAGE_LIST_DESKTOP+=" xserver-xorg-input-all pulseaudio-module-gsettings firefox language-selector-gnome viewnior"
+	;;
+esac
+
+DEBIAN_MIRROR='httpredir.debian.org/debian'
+UBUNTU_MIRROR='ports.ubuntu.com/'
+ROOTFS_CACHE_URL="http://build.khadas.com/khadas/fenix/cache/rootfs"
+
+## U-boot & Linux GitHub URL
+LINUX_SOURCE_URL="https://github.com/khadas/linux"
+UBOOT_SOURCE_URL="https://github.com/khadas/u-boot"
+
+if [[ $DOWNLOAD_MIRROR == china ]] ; then
+	DEBIAN_MIRROR='mirrors.tuna.tsinghua.edu.cn/debian'
+	UBUNTU_MIRROR='mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/'
+	ROOTFS_CACHE_URL="http://build.khadas.com/khadas/fenix/cache/rootfs"
+
+	## U-boot & Linux Gitee URL
+	LINUX_SOURCE_URL="https://gitee.com/khadas/linux"
+	UBOOT_SOURCE_URL="https://gitee.com/khadas/u-boot"
+fi
+
+# apt-cacher-ng mirror configurarion
+if [[ $DISTRIBUTION == Ubuntu ]]; then
+	APT_MIRROR=$UBUNTU_MIRROR
+else
+	APT_MIRROR=$DEBIAN_MIRROR
+fi
+
+PACKAGE_LIST+=" $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL $PACKAGE_LIST_JEVOIS"
+
+# Board Dependencies
+PACKAGE_LIST_BOARD_DEPS="$PACKAGE_LIST"
+[[ "$DISTRIB_TYPE" != "minimal" ]] && PACKAGE_LIST_BOARD_DEPS+=" $PACKAGE_LIST_SERVER_KODI $PACKAGE_LIST_GSTREAMER"
+
+if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
+	PACKAGE_LIST+=" $PACKAGE_LIST_DESKTOP"
+elif [[ "$DISTRIB_TYPE" == "server" ]]; then
+	PACKAGE_LIST+=" $PACKAGE_LIST_SERVER_KODI $PACKAGE_LIST_GSTREAMER"
+fi

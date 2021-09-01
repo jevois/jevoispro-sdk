@@ -1,0 +1,29 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable WIFI/Bluetooth M.2 PCIe card.
+//
+// Load this overlay to use a PCIe WIFI/BT card in the JeVois PCIe slot. Use other overlays when using
+// Myriad-X or Google TPU cards instead.
+//
+
+/ {
+    // Enable bluetooth:
+	fragment@0 {
+		target = <&bt_dev>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+    // Enable WIFI:
+	fragment@1 {
+		target = <&wifi>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};

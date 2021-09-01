@@ -1,0 +1,13 @@
+## Common functions
+source config/functions/common-functions
+
+## Functions
+source config/functions/build-rootfs
+source config/functions/git-repo
+source config/functions/build-package
+source config/functions/build-board-deb
+source config/functions/build-desktop-deb
+source config/functions/build-gpu-deb
+source config/functions/build
+source config/functions/build-common-deb
+source config/functions/build-updater-deb

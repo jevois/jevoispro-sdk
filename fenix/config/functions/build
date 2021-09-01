@@ -1,0 +1,364 @@
+# Functions:
+# build_uboot
+# build_linux
+# build_linux_debs
+# build_uboot_deb
+# build_uboot_image
+# clean_linux
+# clean_uboot
+# config_linux
+# save_linux_config
+
+## Build U-Boot
+build_uboot() {
+	ret=0
+
+	if [ "$UBOOT" == "mainline" ]; then
+		rm -rf $BUILD/.stamps/u-boot-mainline/
+		build_package "u-boot-mainline:target"
+
+		return 0
+	fi
+
+	if [ "$UBOOT_GIT_BRANCH" == "" ]; then
+		error_msg "'UBOOT_GIT_BRANCH' is empty!"
+		return -1
+	fi
+
+	cd ${ROOT}
+	if [ ! -d "$UBOOT_VENDOR_DIR"/.git ]; then
+		info_msg "U-boot repository does not exist, clone u-boot repository('$UBOOT_GIT_BRANCH') from '$UBOOT_SOURCE_URL'..."
+		## Clone u-boot from Khadas GitHub
+		git clone $GIT_CLONE_OPTIONS $UBOOT_SOURCE_URL -b $UBOOT_GIT_BRANCH "$UBOOT_VENDOR_DIR"
+		[ $? != 0 ] && error_msg "Failed to clone 'u-boot'" && return -1
+	fi
+
+	cd "$UBOOT_VENDOR_DIR"
+	touch .scmversion
+
+	if ! git branch | grep "^* $UBOOT_GIT_BRANCH$" > /dev/null; then
+		if ! git branch | grep "^  $UBOOT_GIT_BRANCH$" > /dev/null; then
+			# New branch? Try to fetch it.
+			info_msg "Fetching '$UBOOT_GIT_BRANCH' from '$UBOOT_SOURCE_URL'..."
+			git fetch origin $UBOOT_GIT_BRANCH:$UBOOT_GIT_BRANCH
+		fi
+
+		info_msg "U-boot: Switch to branch '$UBOOT_GIT_BRANCH'"
+		make distclean
+		# Check modifications
+		check_modifications || {
+			error_msg "U-boot: can't checkout to branch '$UBOOT_GIT_BRANCH', please commit your modifications and try again!"
+			return -1
+		}
+
+		git checkout $UBOOT_GIT_BRANCH
+		[ $? != 0 ] && error_msg "U-boot: Switch to branch '$UBOOT_GIT_BRANCH' failed." && return -1
+	else
+		info_msg "U-boot: Already on branch '$UBOOT_GIT_BRANCH'"
+	fi
+
+	# Update u-boot
+	update_git_repo "$PWD" "$UBOOT_GIT_BRANCH"
+
+	info_msg "Build u-boot..."
+	export PATH=$UBOOT_COMPILER_PATH:$PATH
+	if [ "$UBOOT_FORCE_REBUILD" == "yes" ]; then
+		info_msg "U-boot: Force cleaning..."
+		make distclean
+	fi
+	rm -rf .config *.bin *.img
+	make $UBOOT_DEFCONFIG
+	make -j${NR_JOBS} CROSS_COMPILE="${CCACHE} ${UBOOT_COMPILER}"
+
+	if [[ $(type -t uboot_custom_postprocess) == function ]]; then
+		uboot_custom_postprocess
+	fi
+
+	ret=$?
+
+	return $ret
+}
+
+## Build Linux
+build_linux() {
+	ret=0
+
+	if [ "$LINUX" == "mainline" ]; then
+		rm -rf $BUILD/.stamps/linux-mainline/
+		build_package "linux-mainline:target"
+
+		return 0
+	fi
+
+	if [ "$LINUX_GIT_BRANCH" == "" ] || [ "$LINUX_DTB" == "" ]; then
+		[ "$LINUX_GIT_BRANCH" == "" ] && error_msg "'LINUX_GIT_BRANCH' is empty!"
+		[ "$LINUX_DTB" == "" ] && error_msg "'LINUX_DTB' is empty!"
+		return -1
+	fi
+
+	cd ${ROOT}
+	if [ ! -d "$LINUX_VENDOR_DIR"/.git ]; then
+		info_msg "Linux repository does not exist, clone linux repository('$LINUX_GIT_BRANCH') from '$LINUX_SOURCE_URL'..."
+		## Clone linux from Khadas GitHub
+		git clone $GIT_CLONE_OPTIONS $LINUX_SOURCE_URL -b $LINUX_GIT_BRANCH "$LINUX_VENDOR_DIR"
+		[ $? != 0 ] && error_msg "Failed to clone 'linux'" && return -1
+	fi
+
+	cd "$LINUX_VENDOR_DIR"
+	touch .scmversion
+
+	if ! git branch | grep "^* $LINUX_GIT_BRANCH$" > /dev/null; then
+		if ! git branch | grep "^  $LINUX_GIT_BRANCH$" > /dev/null; then
+			# New branch? Try to fetch it.
+			info_msg "Fetching '$LINUX_GIT_BRANCH' from '$LINUX_SOURCE_URL'..."
+			git fetch origin $LINUX_GIT_BRANCH:$LINUX_GIT_BRANCH
+		fi
+
+		info_msg "Linux: Switch to branch '$LINUX_GIT_BRANCH'"
+		make ARCH=arm64 distclean
+
+		# Walkaround for branch switch
+		if [ -f drivers/gpu/arm/mali400/mali/__malidrv_build_info.c ]; then
+			rm drivers/gpu/arm/mali400/mali/__malidrv_build_info.c
+		fi
+
+		# Check modifications
+		check_modifications || {
+			error_msg "Linux: can't checkout to branch '$LINUX_GIT_BRANCH', please commit your modifications and try again!"
+
+			return -1
+		}
+
+		git checkout $LINUX_GIT_BRANCH
+		[ $? != 0 ] && error_msg "Linux: Switch to branch '$LINUX_GIT_BRANCH' failed." && return -1
+	else
+		info_msg "Linux: Already on branch '$LINUX_GIT_BRANCH'"
+	fi
+
+	# Update linux
+	update_git_repo "$PWD" "$LINUX_GIT_BRANCH"
+
+	# no need build just prepare
+	[ ! "$BUILD_LINUX_NOOP" ] || return 0
+
+	info_msg "Build linux..."
+	export PATH=$KERNEL_COMPILER_PATH:$PATH
+	make ARCH=arm64 $LINUX_DEFCONFIG
+	make -j${NR_JOBS} ARCH=arm64 CROSS_COMPILE="${CCACHE} ${KERNEL_COMPILER}" Image dtbs  modules $EXTRA_MAKE_ARGS
+}
+
+## Build linux debs
+build_linux_debs() {
+
+	# Build linux debs
+	info_msg "Build linux debs..."
+
+	cd $ROOT
+
+	# Hack for deb builder. To pack what's missing in headers pack.
+	if [ ! -f /tmp/headers-debian-byteshift.patch ]; then
+		cp archives/patches/misc/headers-debian-byteshift.patch /tmp
+	fi
+
+	export PATH=$KERNEL_COMPILER_PATH:$PATH
+	make -j${NR_JOBS} -C $LINUX_DIR bindeb-pkg \
+	    KDEB_PKGVERSION="$VERSION" LOCAL_VERSION="-${VENDOR,,}-${LINUX}" \
+	    KBUILD_DEBARCH="$DISTRIB_ARCH" ARCH=arm64 DEBFULLNAME="JeVois" \
+	    DEBEMAIL="jevois.org@gmail.com" CROSS_COMPILE="${CCACHE} \
+	    ${KERNEL_COMPILER}" CONFIG_SHELL="bash"
+
+	mkdir -p "$BUILD_DEBS/$VERSION"
+
+	if [ "$LINUX" == "mainline" ]; then
+		mv $BUILD/*.deb $BUILD_DEBS/$VERSION
+		rm -rf $BUILD/*.buildinfo $BUILD/*.changes
+	else
+		mv $BUILD/*.deb $BUILD_DEBS/$VERSION
+		rm -rf $BUILD/*.buildinfo $BUILD/*.changes
+	fi
+}
+
+## Build u-boot deb
+build_uboot_deb() {
+	local pkgname="${LINUX_UBOOT_DEB}"
+	local pkgdir="$BUILD_IMAGES/.tmp/${pkgname}_${VERSION}-${UBOOT_VER}_${DISTRIB_ARCH}"
+
+	rm -rf $pkgdir
+	mkdir -p $pkgdir/usr/lib/u-boot $pkgdir/DEBIAN
+
+	# Copy u-boot files
+	local uboot_files=$UBOOT_IMAGE_FILES
+	for file in $uboot_files; do
+		if [ ! -f $UBOOT_IMAGE_DIR/$file ]; then
+			error_msg "U-boot file '$file' not found!"
+			return -1
+		fi
+		cp "$UBOOT_IMAGE_DIR/$file" "$pkgdir"/usr/lib/u-boot
+	done
+
+	# For amlogic platform, we need to update the dtb for u-boot
+	# Only for vendor u-boot & kernel
+	if [ "$VENDOR" == "Amlogic" ] && [ "$LINUX" != "mainline" ]; then
+		cp "$LINUX_DIR/$LINUX_DTB" "$pkgdir"/usr/lib/u-boot/dtb.img
+	fi
+
+	cat <<-EOF > $pkgdir/usr/lib/u-boot/platform_install.sh
+	DIR=/usr/lib/u-boot
+	$(declare -f write_uboot_platform)
+	$(declare -f write_uboot_platform_ext)
+	$(declare -f setup_write_uboot_platform)
+	EOF
+
+	# Set up control file
+	cat <<-EOF > $pkgdir/DEBIAN/control
+	Package: $pkgname
+	Version: $VERSION-$UBOOT_VER
+	Architecture: $DISTRIB_ARCH
+	Maintainer: khadas <hello@khadas.com>
+	Installed-Size: 1
+	Section: kernel
+	Priority: optional
+	Provides: fenix-u-boot
+	EOF
+
+	if [ "$VENDOR" == "Amlogic" ]; then
+		cat <<-EOF >> $pkgdir/DEBIAN/control
+		Replaces: fenix-u-boot, linux-u-boot-jvpro, linux-u-boot-jvpro-mainline, linux-u-boot-jvpro-vendor
+		EOF
+	else
+		cat <<-EOF >> $pkgdir/DEBIAN/control
+		Replaces: fenix-u-boot, linux-u-boot-edge-mainline, linux-u-boot-edge-vendor
+		EOF
+	fi
+
+	cat <<-EOF >> $pkgdir/DEBIAN/control
+	Description: U-boot $UBOOT_VER
+	EOF
+
+	# Set up postinst file
+	cat <<-EOF > $pkgdir/DEBIAN/postinst
+	#!/bin/bash
+
+	# Exit if we are running chroot
+	if [ "\$(stat -c %d:%i /)" != "\$(stat -c %d:%i /proc/1/root/.)" ]; then exit 0; fi
+
+	source /usr/lib/u-boot/platform_install.sh
+	source /etc/fenix-release
+	[[ \$(type -t setup_write_uboot_platform) == function ]] && setup_write_uboot_platform
+	EOF
+
+	if [ "$VENDOR" == "Amlogic" ]; then
+		cat <<-EOF >> $pkgdir/DEBIAN/postinst
+		if [[ \$DEVICE = VENDOR ]]; then
+			echo "Updating dtb for u-boot ..."
+			[ -c /dev/dtb -a -f /usr/lib/u-boot/dtb.img ] && dd if=/usr/lib/u-boot/dtb.img of=/dev/dtb > /dev/null 2>&1
+			echo "Updating u-boot on /dev/mmcblk0 (eMMC)"
+			write_uboot_platform_ext \$DIR
+			echo "Reseting u-boot environment variables ..."
+			[ -b /dev/env ] && dd if=/dev/zero of=/dev/env bs=1M count=1 > /dev/null 2>&1
+			sync
+		else
+			if [[ -b \$DEVICE ]]; then
+				echo "Updating u-boot on \$DEVICE"
+				write_uboot_platform \$DIR \$DEVICE
+				echo "Reseting u-boot environment variables ..."
+				[ -b /dev/env ] && dd if=/dev/zero of=/dev/env bs=1M count=1 > /dev/null 2>&1
+				sync
+			else
+				echo "Device \$DEVICE does not exist, skipping"
+			fi
+		fi
+
+		exit 0
+		EOF
+	else
+		cat <<-EOF >> $pkgdir/DEBIAN/postinst
+		if [[ -b \$DEVICE ]]; then
+			echo "Updating u-boot on \$DEVICE"
+			if [[ "\$INSTALL_TYPE" == "EMMC" ]]; then
+				[[ \$(type -t write_uboot_platform_ext) == function ]] && write_uboot_platform_ext \$DIR \$DEVICE
+			else
+				write_uboot_platform \$DIR \$DEVICE
+			fi
+			sync
+		else
+			echo "Device \$DEVICE does not exist, skipping"
+		fi
+
+		exit 0
+		EOF
+	fi
+
+	chmod 755 $pkgdir/DEBIAN/postinst
+
+	cat <<-EOF > $pkgdir/DEBIAN/prerm
+	#!/bin/bash
+	rm -rf /usr/lib/u-boot/.UBOOT-NEED-UPDATE
+	EOF
+
+	chmod 755 $pkgdir/DEBIAN/prerm
+
+	# Create board deb file
+	info_msg "Building package: $pkgname"
+	fakeroot dpkg-deb -b $pkgdir ${pkgdir}.deb
+	mkdir -p $BUILD_DEBS/$VERSION/$KHADAS_BOARD
+	cp ${pkgdir}.deb $BUILD_DEBS/$VERSION/$KHADAS_BOARD
+	# Cleanup
+	rm -rf ${pkgdir}.deb
+	rm -rf $pkgdir
+}
+
+# Clean linux
+clean_linux() {
+	for LINUX_DIR in $LINUX_DIR; do break; done
+	info_msg "Clean linux..."
+	[ -e "$LINUX_DIR/Makefile" ] || return 0
+	export PATH=$KERNEL_COMPILER_PATH:$PATH
+	make ARCH=arm64 distclean -C"$LINUX_DIR"
+}
+
+# Clean u-boot
+clean_uboot() {
+	for UBOOT_DIR in $UBOOT_DIR; do break; done
+	info_msg "Clean u-boot..."
+	[ -e "$UBOOT_DIR/Makefile" ] || return 0
+	make distclean -C"$UBOOT_DIR"
+}
+
+# Config linux
+config_linux() {
+	for LINUX_DIR in $LINUX_DIR; do break; done
+	info_msg "Config linux..."
+	[ -e "$LINUX_DIR/Makefile" ] || {
+		BUILD_LINUX_NOOP=1
+		build_linux
+		for LINUX_DIR in $LINUX_DIR; do break; done
+	}
+
+	export PATH=$KERNEL_COMPILER_PATH:$PATH
+	if [ "$LINUX" == "mainline" ]; then
+		cp $PKGS_DIR/linux-mainline/configs/${KHADAS_BOARD}.config "$LINUX_DIR"/.config
+	else
+		make ARCH=arm64 $LINUX_DEFCONFIG -C"$LINUX_DIR"
+	fi
+
+	make ARCH=arm64 CROSS_COMPILE=${KERNEL_COMPILER} menuconfig -C"$LINUX_DIR"
+}
+
+# Save linux config
+save_linux_config() {
+	for LINUX_DIR in $LINUX_DIR; do break; done
+	info_msg "Save linux config..."
+	[ -e "$LINUX_DIR/Makefile" ] || {
+		error_msg "Need prepare linux before save config (make kernel-saveconfig) "
+		return 1
+	}
+
+	export PATH=$KERNEL_COMPILER_PATH:$PATH
+	if [ "$LINUX" == "mainline" ]; then
+		cp "$LINUX_DIR"/.config $PKGS_DIR/linux-mainline/configs/${KHADAS_BOARD}.config
+	else
+		make ARCH=arm64 CROSS_COMPILE=${KERNEL_COMPILER} savedefconfig -C"$LINUX_DIR"
+		mv "$LINUX_DIR"/defconfig "$LINUX_DIR"/arch/arm64/configs/$LINUX_DEFCONFIG
+	fi
+}

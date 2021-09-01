@@ -1,0 +1,608 @@
+#!/bin/bash
+
+## hyphop ##
+
+#= build test framework
+
+STOP=0
+SIGNALS="HUP INT QUIT TERM KILL"
+
+#export HIDE_PREF
+
+SHARE=/build
+USERS=.users/
+LOGP=/tmp/
+
+[ "$PID_" ] || \
+PID_=$$
+
+[ "$PPID_" ] || \
+PPID_=$PPID
+
+[ "$sudo" ] || \
+    sudo=sudo
+
+#PPID_=$(grep PPid /proc/$PID_/status | grep -o -P \\d+)
+PPID_CMD=$(tr '\0' ' ' < /proc/$PPID_/cmdline)
+
+# get process session id
+[ "$SID_" ] || \
+    SID_=$(grep NSsid /proc/$PID_/status | grep -o -P \\d+)
+
+STOP(){
+    trap - $SIGNALS
+    STOP=$((STOP+1))
+    JOBS=$(echo $(jobs -p))
+    echo "%% STOP($STOP) $0 JOBS: $JOBS PID: $PID_ SID: $SID_ :: $?">&2
+    [ "$JOBS" ] && \
+	kill -TERM $JOBS
+}
+
+trap "STOP" $SIGNALS
+
+PROG=${0##*/}
+DIR=${0%/*}
+
+USAGE(){ echo "\
+USAGE: $PROG [-h|--help] [-l] [-s] [-E] [-n] [-m|-M|-e] [test_name] ...\
+
+    -l test list | -n noop mode | -m match test | -M regexp match | -h help
+    -e regexp tests | -E no errors stop on fist fail | -s show more sumarry
+"
+}
+
+EXAMPLES(){ echo "\
+EXAMPLES
+    $PROG -l # display all tests
+    GITHUB_ENV=1 USED_SPACE=96 $PROG .. # github action env
+    GITHUB_ENV=1 USED_SPACE=1  $PROG TEST-True TEST-Signals
+    BUILD=../fenix.build DOWNLOAD_PKG_DIR=../fenix.dl $PROG .. # change default build env
+    BUILD=../fenix.build DOWNLOAD_PKG_DIR=../fenix.dl ./scripts/tests/build_test VIM3L-default-image-mini-raw # ...
+    GITHUB_ENV=1 USED_SPACE=1 BUILD=../fenix.build DOWNLOAD_PKG_DIR=../fenix.dl ./scripts/tests/build_test VIM3L-default-image-mini-raw
+    $PROG -e -        # all tests
+    $PROG -e VIM1-    # all tests for VIM1
+    $PROG -e VIM1-    # all tests for VIM1
+    $PROG -E -e VIM1- # all tests for VIM1 stop after 1st fail
+    $PROG -s -e VIM1- # all tests for VIM1 + extra summary
+    LOGFILE=/tmp/test.log ./build_test TEST_True # dublicate output to LOGFILE
+"
+}
+
+MAKEDIR=${0%/*}/../..
+SETENV=$MAKEDIR/env/setenv.sh
+
+#export CHECK_BUSY=yes
+
+#echo "[i] $0 DIR: $MAKEDIR ARGS: $@">&2
+
+export NO_ASK=1
+export NO_GIT_UPDATE=1
+
+export NO_KEEP_IMAGE=1
+
+export CLONE_FULL_COMMIT_LOG=yes
+
+
+#[ "" ] && \
+[ "$GITHUB_ENV" -a ! "$LOG2" ] && \
+    LOGFILE=auto
+
+[ "$LOGFILE" ] && {
+## matroska run
+    now=$(date +%s)
+    case $GITHUB_REPOSITORY in
+	khadas*)
+	LOGP="$SHARE/$GITHUB_REPOSITORY"
+	;;
+	*)
+	LOGP="$SHARE/$USERS$GITHUB_REPOSITORY"
+	;;
+    esac
+
+    LOG2=$LOGFILE
+    case $LOG2 in
+	auto)
+	LOG2=$LOGP/logs/$PROG.$now.log
+	# read last
+	#[ -e $LOGP$PROG.last.log ] && {
+	#    PL=$(readlink $LOGP$PROG.last.log)
+	#}
+	mkdir -p $LOGP/logs;
+	UPLOAD="$LOGP/images"
+	mkdir -p "$UPLOAD";
+	ROOTFS_CACHE="$LOGP/cache/rootfs"
+	mkdir -p $ROOTFS_CACHE
+
+	ln -sf "logs/$PROG.$now.log" "$LOGP/$PROG.last.log"
+
+	#grep -q $SHARE /proc/mounts && \
+	#LOG3=$SHARE/fenix/$PROG.$now.log
+
+	;;
+    esac
+    LOGFILE=
+    export LOGFILE
+    export LOG2
+    export UPLOAD
+    export ROOTFS_CACHE
+    export UPLOAD_SCRIPT="$(realpath "$DIR"/upload)"
+    export PPID_
+    export PID_
+    export SID_
+
+    touch $LOG2 || exit 1
+    chmod 0666 $LOG2
+    #printf >> $LOG2
+
+    echo "%%LOGFILE: $LOG2 [$(date)]">&2
+    echo "%%LOGFILE: ${LOG2#$HIDE_PREF} [$(date)]">>$LOG2
+    echo "%%CMD: $0 $@">>$LOG2
+
+    $0 "$@" >>$LOG2 2>&1 &
+    P=$!
+
+    tail -n1 -q --pid $P -F "$LOG2" &
+    wait $P
+    exit
+}
+
+tests=
+
+get_tests(){
+tests="$(grep -A999 ^\#TEST_LIST_BEGIN $0 | grep -B999 ^\#TEST_LIST_END | grep -o ^.*\) | sed s/\).*//)"
+}
+
+#TEST=
+for a in $@; do
+    case $a in 
+    -h|--help)
+    USAGE
+    EXAMPLES
+    exit
+    ;;
+    -i)
+    INFO=1
+    ;;
+    -l|--list)
+    echo "[i] full test list">&2
+    get_tests
+    echo "$tests"
+    exit
+    ;;
+    -m|--match)
+    MATCH=grep
+    ;;
+    -M)
+    MATCH=egrep
+    ;;
+    -s)
+    SUMMARY_SHOW=1
+    ;;
+    -E)
+    NO_ERROR=NO_ERROR
+    ;;
+    -e)
+    EVAL=1
+    MATCH=egrep
+    ;;
+    -n|--noop)
+    NOOP=1
+    ;;
+    *)
+    [ "$INFO" ] && {
+	grep -A999 "$a)" $0 | grep -m1 -B999 ";;"
+	exit
+    }
+    [ "$MATCH" ] && {
+	get_tests
+	if [ "$EVAL" ]; then
+	    a_=$(echo "$tests" | $MATCH "$a")
+	    [ "$a_" ] && a=$a_
+	else
+	    echo "$tests" | $MATCH "$a"
+	    exit
+	fi
+    }
+    [ "$a" ] && \
+    TESTS="$TESTS $a"
+    ;;
+    esac
+done
+
+[ "$TESTS" ] || {
+    USAGE>&2
+    echo "[e] cant defined any test">&2
+    exit 1
+}
+
+# checks
+for a in $TESTS; do
+    get_tests
+    for b in $tests; do
+	[ "$b" = "$a" ] && b= && break
+    done
+    [ "$b" ] && {
+	USAGE>&2
+	echo "[e] cant recognize this test: $a">&2
+	exit 1
+    }
+done
+
+RUN(){
+    echo "# $@">&2
+    [ "$NOOP" ] || \
+    "$@"
+}
+
+
+[ "$GITHUB_ENV" ] && {
+
+	# CI build should fetch latest code
+	unset NO_GIT_UPDATE
+
+	# CI build should force build kernel debian package based on latest code
+	export FORCE_BUILD_KERNEL_DEB=yes
+
+	# CI build should skip download rootfs cache from server
+	export SKIP_ROOTFS_CACHE_DOWNLOAD=yes
+
+    [ "$BUILD" ] || \
+    BUILD=../fenix.build
+
+    [ "$DOWNLOAD_PKG_DIR" ] || \
+    DOWNLOAD_PKG_DIR=../fenix.dl
+
+    [ "$FENIX_TEST" ] || {
+    echo "%%GITHUB action detected :: GITHUB_ENV: $GITHUB_ENV">&2
+    #env
+    [ -e "$GITHUB_ENV" ] && {
+    echo "%%GITHUB_ENV:" $(cat $GITHUB_ENV)
+    echo FENIX_TEST=$(date +%s) >> $GITHUB_ENV
+    }
+
+    # emergeny cleaner
+    grep -q HOME_FULL /etc/cron.d/home_full 2>/dev/null || {
+    echo "* * * * * root df /home --output=pcent | grep -q 100 && echo HOME_FULL > /dev/kmsg && BUILD=$BUILD make clean -C\"$(realpath "$MAKEDIR")\" >> /tmp/home_clean.log" | sudo tee /etc/cron.d/home_full
+    }
+
+    }
+
+    export BUILD
+    export DOWNLOAD_PKG_DIR
+
+    # check free space
+    [ "$USED_SPACE" ] || \
+    USED_SPACE=$(df /home --output=pcent| grep -o [[:digit:]]*)
+
+    echo "%%USED_SPACE: $USED_SPACE%">&2
+
+    # need clean
+    [ "$USED_SPACE" -gt 90 ] && {
+	#RUNNER_WORKSPACE=/home/builder/actions-runner/_work/fenix
+	#GITHUB_WORKSPACE=/home/builder/actions-runner/_work/fenix/fenix
+	#[ -d "$RUNNER_WORKSPACE" ] && {
+	echo "[i] FREE SPACE CLEANING: $RUNNER_WORKSPACE">&2
+	RUN make clean -C "$MAKEDIR"
+	#}
+
+    # recheck free space again
+    USED_SPACE=$(df /home --output=pcent| grep -o [[:digit:]]*)
+    echo "[i] USED_SPACE: $USED_SPACE">&2
+
+    }
+
+}
+
+[[ "$GITHUB_EVENT_NAME" == "schedule" ]] && {
+	TEST_BUILD=yes
+	echo "%%Fenix Rootfs Cache Build"
+}
+
+[[ "$TEST_BUILD" != "yes" && "$GITHUB_REF" =~ "refs/tags" ]] && {
+    RELEASE_BUILD=yes
+    echo "%%Fenix Release Build Version: ${GITHUB_REF##*/}"
+    # Clean up before release build
+    RUN make clean -C "$MAKEDIR"
+}
+
+echo "%%BUILD LIST[$NO_ERROR]:" $TESTS >&2
+
+[ "$BUILD" ] && \
+echo "\
+%%BUILD: $BUILD
+%%DOWNLOAD_PKG_DIR: $DOWNLOAD_PKG_DIR
+">&2
+
+ML="UBOOT=mainline"
+CMP="COMPRESS_IMAGE=yes"
+EMMC="INSTALL_TYPE=EMMC"
+USB="INSTALL_TYPE=SD-USB"
+RAW="INSTALL_TYPE_RAW=yes"
+
+EDGE="KHADAS_BOARD=Edge"
+VIM1="KHADAS_BOARD=VIM1"
+VIM2="KHADAS_BOARD=VIM2"
+VIM3="KHADAS_BOARD=VIM3"
+VIM3L="KHADAS_BOARD=VIM3L"
+
+MINI="DISTRIB_TYPE=minimal"
+SERVER="DISTRIB_TYPE=server"
+XFCE="DISTRIB_TYPE=xfce"
+LXDE="DISTRIB_TYPE=lxde"
+BIONIC="DISTRIBUTION=Ubuntu DISTRIB_RELEASE=bionic"
+FOCAL="DISTRIBUTION=Ubuntu DISTRIB_RELEASE=focal"
+BUSTER="DISTRIBUTION=Debian DISTRIB_RELEASE=buster"
+GNOME="DISTRIB_TYPE=gnome"
+
+ROOTFS_CACHE_ONLY="CREATE_ROOTFS_CACHE_ONLY=yes"
+
+[ "$NOOP" ] && {
+    echo "[i] NOOP MODE">&2
+    exit 0
+}
+
+[ "$GITHUB_ENV" ] && \
+(   # self kill if parentless
+    echo "%%PPID WATCH: $PPID_($PID_) [$PPID_CMD]">&2
+    while [ -d /proc/$PPID_ -a -d /proc/$PID_ ] ; do
+	#[ -d /proc/$PID_ ] && break
+	sleep 1
+    done
+
+    echo "%%PPID EXIT: $PPID_ PID: $PID_ SID: $SID_ ">&2
+    # kill parentless build sudo processes
+    $sudo pkill -SIGTERM -u root -s $SID_
+    sleep 2
+    # self kill
+    [ -d /proc/$PID_ ] && kill -TERM $PID_
+
+    exit
+)&
+
+ok=0
+fail=0
+total=0
+for t in $TESTS; do
+    total=$((total+1))
+done
+
+begin0=$(date +%s)
+
+this=0
+
+SUMMARY=
+
+for TEST in $TESTS; do
+    [ "$STOP" -gt 0 ] && break
+    begin=$(date +%s)
+    this=$((this+1))
+
+# PRE-config tests
+    case $TEST in
+	*-REL*) [ "$RELEASE_BUILD" ] && export BUILD_TYPE=release ;;
+	*) export BUILD_TYPE=develop ;;
+    esac
+
+    echo "%%TEST[$this/$total]: $TEST $BUILD_TYPE STARTING [$(date --date=@$begin)] $$">&2
+
+# NOTE ALL LONG TEST NEED RUN IN BG
+
+    BG_=$!
+
+    case $TEST in
+#TEST_LIST_BEGIN
+Install-deps)
+    (
+    RUN sudo dpkg --configure -a # && \
+    RUN sudo apt-get update # && \
+    RUN sudo apt-get install -y git make lsb-release qemu-user-static zip
+    )&
+    ;;
+
+Clean)  make -C "$MAKEDIR" clean & ;;
+Clean_all) make -C "$MAKEDIR" clean-all & ;;
+Clean_old) make -C "$MAKEDIR" clean-old & ;;
+
+TEST_True) true;;
+TEST_TrueBG) true &;;
+TEST_False) false;;
+TEST_FalseBG) false &;;
+TEST_Signals) "$DIR"/signal_test & ;;
+TEST_Delay) for s in $(seq 1 60); do echo tik tak $s; sleep 1; done & ;;
+TEST_ML)
+    echo ONE
+    echo TWO
+;;
+
+## REL           - release tag
+## TEST          - test tag
+## CHK           - build check for every commit
+
+# VIM1 Release Images
+VIM1-ubuntu-server-bionic-vendor-emmc-REL-CHK)              ( source  $SETENV -d -q -s $VIM1 $BIONIC $SERVER $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM1-ubuntu-xfce-bionic-vendor-emmc-REL-CHK)                ( source  $SETENV -d -q -s $VIM1 $BIONIC $XFCE $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM1-ubuntu-server-bionic-vendor-sdusb-REL)                 ( source  $SETENV -d -q -s $VIM1 $BIONIC $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM1-ubuntu-xfce-bionic-vendor-sdusb-REL)                   ( source  $SETENV -d -q -s $VIM1 $BIONIC $XFCE $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM1-ubuntu-server-focal-mainline-sdusb-REL-TEST)           ( source  $SETENV -d -q -s $VIM1 $FOCAL $SERVER $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM1-ubuntu-gnome-focal-mainline-sdusb-REL-TEST)            ( source  $SETENV -d -q -s $VIM1 $FOCAL $GNOME $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+# VIM1 Test Images
+VIM1-ubuntu-minimal-focal-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM1 $FOCAL $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM1-debian-server-buster-vendor-emmc)                      ( source  $SETENV -d -q -s $VIM1 $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM1-debian-xfce-buster-vendor-emmc)                        ( source  $SETENV -d -q -s $VIM1 $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM1-debian-minimal-buster-vendor-emmc)                     ( source  $SETENV -d -q -s $VIM1 $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+
+VIM1-debian-server-buster-vendor-sdusb)                     ( source  $SETENV -d -q -s $VIM1 $BUSTER $SERVER $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM1-debian-xfce-buster-vendor-sdusb)                       ( source  $SETENV -d -q -s $VIM1 $BUSTER $XFCE $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM1-debian-minimal-buster-vendor-sdusb)                    ( source  $SETENV -d -q -s $VIM1 $BUSTER $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM1-debian-server-buster-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM1 $BUSTER $SERVER $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM1-debian-xfce-buster-mainline-sdusb)                     ( source  $SETENV -d -q -s $VIM1 $BUSTER $XFCE $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM1-debian-minimal-buster-mainline-sdusb)                  ( source  $SETENV -d -q -s $VIM1 $BUSTER $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+# VIM2 Release Images
+VIM2-ubuntu-server-bionic-vendor-emmc-REL-CHK)              ( source  $SETENV -d -q -s $VIM2 $BIONIC $SERVER $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM2-ubuntu-xfce-bionic-vendor-emmc-REL-CHK)                ( source  $SETENV -d -q -s $VIM2 $BIONIC $XFCE $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM2-ubuntu-server-bionic-vendor-sdusb-REL)                 ( source  $SETENV -d -q -s $VIM2 $BIONIC $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM2-ubuntu-xfce-bionic-vendor-sdusb-REL)                   ( source  $SETENV -d -q -s $VIM2 $BIONIC $XFCE $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM2-ubuntu-server-focal-mainline-sdusb-REL-TEST)           ( source  $SETENV -d -q -s $VIM2 $FOCAL $SERVER $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM2-ubuntu-gnome-focal-mainline-sdusb-REL-TEST)            ( source  $SETENV -d -q -s $VIM2 $FOCAL $GNOME $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+# VIM2 Test Images
+VIM2-ubuntu-minimal-focal-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM2 $FOCAL $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM2-debian-server-buster-vendor-emmc)                      ( source  $SETENV -d -q -s $VIM2 $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM2-debian-xfce-buster-vendor-emmc)                        ( source  $SETENV -d -q -s $VIM2 $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM2-debian-minimal-buster-vendor-emmc)                     ( source  $SETENV -d -q -s $VIM2 $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+
+VIM2-debian-server-buster-vendor-sdusb)                     ( source  $SETENV -d -q -s $VIM2 $BUSTER $SERVER $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM2-debian-xfce-buster-vendor-sdusb)                       ( source  $SETENV -d -q -s $VIM2 $BUSTER $XFCE $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM2-debian-minimal-buster-vendor-sdusb)                    ( source  $SETENV -d -q -s $VIM2 $BUSTER $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM2-debian-server-buster-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM2 $BUSTER $SERVER $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM2-debian-xfce-buster-mainline-sdusb)                     ( source  $SETENV -d -q -s $VIM2 $BUSTER $XFCE $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM2-debian-minimal-buster-mainline-sdusb)                  ( source  $SETENV -d -q -s $VIM2 $BUSTER $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+# VIM3 Release Images
+VIM3-ubuntu-server-focal-vendor-emmc-REL-CHK)               ( source  $SETENV -d -q -s $VIM3 $FOCAL $SERVER $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM3-ubuntu-gnome-focal-vendor-emmc-REL-CHK)                ( source  $SETENV -d -q -s $VIM3 $FOCAL $GNOME $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM3-ubuntu-server-focal-vendor-sdusb-REL)                  ( source  $SETENV -d -q -s $VIM3 $FOCAL $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3-ubuntu-gnome-focal-vendor-sdusb-REL)                   ( source  $SETENV -d -q -s $VIM3 $FOCAL $GNOME $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3-ubuntu-server-focal-mainline-sdusb-REL-TEST)           ( source  $SETENV -d -q -s $VIM3 $FOCAL $SERVER $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3-ubuntu-gnome-focal-mainline-sdusb-REL-TEST)            ( source  $SETENV -d -q -s $VIM3 $FOCAL $GNOME $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+# VIM3 Test Images
+VIM3-ubuntu-minimal-focal-vendor-emmc)                      ( source  $SETENV -d -q -s $VIM3 $FOCAL $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3-ubuntu-minimal-focal-vendor-sdusb)                     ( source  $SETENV -d -q -s $VIM3 $FOCAL $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3-ubuntu-minimal-focal-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM3 $FOCAL $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3-debian-server-buster-vendor-emmc)                      ( source  $SETENV -d -q -s $VIM3 $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3-debian-xfce-buster-vendor-emmc)                        ( source  $SETENV -d -q -s $VIM3 $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3-debian-minimal-buster-vendor-emmc)                     ( source  $SETENV -d -q -s $VIM3 $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+
+VIM3-debian-server-buster-vendor-sdusb)                     ( source  $SETENV -d -q -s $VIM3 $BUSTER $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3-debian-xfce-buster-vendor-sdusb)                       ( source  $SETENV -d -q -s $VIM3 $BUSTER $XFCE $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3-debian-minimal-buster-vendor-sdusb)                    ( source  $SETENV -d -q -s $VIM3 $BUSTER $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3-debian-server-buster-mainline-sdusb)                   ( source  $SETENV -d -q -s $VIM3 $BUSTER $SERVER $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3-debian-xfce-buster-mainline-sdusb)                     ( source  $SETENV -d -q -s $VIM3 $BUSTER $XFCE $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3-debian-minimal-buster-mainline-sdusb)                  ( source  $SETENV -d -q -s $VIM3 $BUSTER $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+# VIM3L Release Images
+VIM3L-ubuntu-server-focal-vendor-emmc-REL-CHK)              ( source  $SETENV -d -q -s $VIM3L $FOCAL $SERVER $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM3L-ubuntu-gnome-focal-vendor-emmc-REL-CHK)               ( source  $SETENV -d -q -s $VIM3L $FOCAL $GNOME $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+VIM3L-ubuntu-server-focal-vendor-sdusb-REL)                 ( source  $SETENV -d -q -s $VIM3L $FOCAL $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3L-ubuntu-gnome-focal-vendor-sdusb-REL)                  ( source  $SETENV -d -q -s $VIM3L $FOCAL $GNOME $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3L-ubuntu-server-focal-mainline-sdusb-REL-TEST)          ( source  $SETENV -d -q -s $VIM3L $FOCAL $SERVER $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3L-ubuntu-gnome-focal-mainline-sdusb-REL-TEST)           ( source  $SETENV -d -q -s $VIM3L $FOCAL $GNOME $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+# VIM3L Test Images
+VIM3L-ubuntu-minimal-focal-vendor-emmc)                     ( source  $SETENV -d -q -s $VIM3L $FOCAL $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3L-ubuntu-minimal-focal-vendor-sdusb)                    ( source  $SETENV -d -q -s $VIM3L $FOCAL $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3L-ubuntu-minimal-focal-mainline-sdusb)                  ( source  $SETENV -d -q -s $VIM3L $FOCAL $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3L-debian-server-buster-vendor-emmc)                     ( source  $SETENV -d -q -s $VIM3L $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3L-debian-xfce-buster-vendor-emmc)                       ( source  $SETENV -d -q -s $VIM3L $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+VIM3L-debian-minimal-buster-vendor-emmc)                    ( source  $SETENV -d -q -s $VIM3L $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+
+VIM3L-debian-server-buster-vendor-sdusb)                    ( source  $SETENV -d -q -s $VIM3L $BUSTER $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+VIM3L-debian-xfce-buster-vendor-sdusb)                      ( source  $SETENV -d -q -s $VIM3L $BUSTER $XFCE $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3L-debian-minimal-buster-vendor-sdusb)                   ( source  $SETENV -d -q -s $VIM3L $BUSTER $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+VIM3L-debian-server-buster-mainline-sdusb)                  ( source  $SETENV -d -q -s $VIM3L $BUSTER $SERVER $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3L-debian-xfce-buster-mainline-sdusb)                    ( source  $SETENV -d -q -s $VIM3L $BUSTER $XFCE $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+VIM3L-debian-minimal-buster-mainline-sdusb)                 ( source  $SETENV -d -q -s $VIM3L $BUSTER $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+# Edge Release Images
+Edge-ubuntu-server-bionic-vendor-emmc-REL-CHK)              ( source  $SETENV -d -q -s $EDGE $BIONIC $SERVER $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+Edge-ubuntu-lxde-bionic-vendor-emmc-REL-CHK)                ( source  $SETENV -d -q -s $EDGE $BIONIC $LXDE $EMMC $CMP && make -C "$MAKEDIR"  && make image -C "$MAKEDIR"  $RAW) & ;;
+Edge-ubuntu-server-bionic-vendor-sdusb-REL)                 ( source  $SETENV -d -q -s $EDGE $BIONIC $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+Edge-ubuntu-lxde-bionic-vendor-sdusb-REL)                   ( source  $SETENV -d -q -s $EDGE $BIONIC $LXDE $USB $CMP && make -C "$MAKEDIR" ) & ;;
+Edge-ubuntu-server-focal-mainline-sdusb-REL-TEST)           ( source  $SETENV -d -q -s $EDGE $FOCAL $SERVER $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+Edge-ubuntu-gnome-focal-mainline-sdusb-REL-TEST)            ( source  $SETENV -d -q -s $EDGE $FOCAL $GNOME $ML $USB $CMP && make -C "$MAKEDIR" ) & ;;
+# Edge Test Images
+Edge-ubuntu-minimal-focal-vendor-emmc)                      ( source  $SETENV -d -q -s $EDGE $FOCAL $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+Edge-ubuntu-minimal-focal-vendor-sdusb)                     ( source  $SETENV -d -q -s $EDGE $FOCAL $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+Edge-ubuntu-minimal-focal-mainline-sdusb)                   ( source  $SETENV -d -q -s $EDGE $FOCAL $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+Edge-debian-server-buster-vendor-emmc)                      ( source  $SETENV -d -q -s $EDGE $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+Edge-debian-xfce-buster-vendor-emmc)                        ( source  $SETENV -d -q -s $EDGE $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+Edge-debian-minimal-buster-vendor-emmc)                     ( source  $SETENV -d -q -s $EDGE $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" && make image -C "$MAKEDIR" $RAW) & ;;
+
+Edge-debian-server-buster-vendor-sdusb)                     ( source  $SETENV -d -q -s $EDGE $BUSTER $SERVER $USB $CMP && make -C "$MAKEDIR" ) & ;;
+Edge-debian-xfce-buster-vendor-sdusb)                       ( source  $SETENV -d -q -s $EDGE $BUSTER $XFCE $USB $CMP && make -C "$MAKEDIR") & ;;
+Edge-debian-minimal-buster-vendor-sdusb)                    ( source  $SETENV -d -q -s $EDGE $BUSTER $MINI $USB $CMP && make -C "$MAKEDIR") & ;;
+
+Edge-debian-server-buster-mainline-sdusb)                   ( source  $SETENV -d -q -s $EDGE $BUSTER $SERVER $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+Edge-debian-xfce-buster-mainline-sdusb)                     ( source  $SETENV -d -q -s $EDGE $BUSTER $XFCE $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+Edge-debian-minimal-buster-mainline-sdusb)                  ( source  $SETENV -d -q -s $EDGE $BUSTER $MINI $ML $USB $CMP && make -C "$MAKEDIR") & ;;
+
+# Rootfs Cache Only
+bionic-minimal-CACHE)                                       ( source  $SETENV -d -q -s $VIM1 $BIONIC $MINI $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+bionic-server-CACHE)                                        ( source  $SETENV -d -q -s $VIM1 $BIONIC $SERVER $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+bionic-xfce-CACHE)                                          ( source  $SETENV -d -q -s $VIM1 $BIONIC $XFCE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+bionic-lxde-CACHE)                                          ( source  $SETENV -d -q -s $VIM1 $BIONIC $LXDE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+
+focal-minimal-CACHE)                                        ( source  $SETENV -d -q -s $VIM1 $FOCAL $MINI $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+focal-server-CACHE)                                         ( source  $SETENV -d -q -s $VIM1 $FOCAL $SERVER $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+focal-xfce-CACHE)                                           ( source  $SETENV -d -q -s $VIM1 $FOCAL $XFCE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+focal-lxde-CACHE)                                           ( source  $SETENV -d -q -s $VIM1 $FOCAL $LXDE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+focal-gnome-CACHE)                                          ( source  $SETENV -d -q -s $VIM1 $FOCAL $GNOME $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+
+buster-minimal-CACHE)                                       ( source  $SETENV -d -q -s $VIM1 $BUSTER $MINI $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+buster-server-CACHE)                                        ( source  $SETENV -d -q -s $VIM1 $BUSTER $SERVER $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+buster-xfce-CACHE)                                          ( source  $SETENV -d -q -s $VIM1 $BUSTER $XFCE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+buster-lxde-CACHE)                                          ( source  $SETENV -d -q -s $VIM1 $BUSTER $LXDE $EMMC $CMP && make -C "$MAKEDIR" "$ROOTFS_CACHE_ONLY") & ;;
+
+#TEST_LIST_END
+    *)
+    echo "[e] not recognized test $TEST">&2
+    ;;
+    esac
+
+    code=$?
+
+#    if [ "$!" ]; then
+	if [ "$BG_" -ne "$!" ]; then
+	    wait $!
+	    code=$?
+	fi
+#    fi
+
+    end=$(date +%s)
+    duration=$((end-begin))
+    duration0=$((end-begin0))
+
+    case $code in
+	0)status=OK
+	ok=$((ok+1))
+	;;
+	*)status=ERROR
+	fail=$((fail+1))
+	code_="exit_code: $code"
+	;;
+    esac
+
+    DETAILS="%%TEST[$this/$total]: $TEST == $status $code_ duration: $duration = \
+$(date +%H:%M:%S -d@$duration -u)"
+
+    SUMMARY="$SUMMARY
+$DETAILS"
+    echo "$DETAILS total: $duration0 = $(date +%H:%M:%S -d@$duration0 -u)" >&2
+
+    [ "$NO_ERROR" -a "$code" -ne 0 ] && break
+done
+
+end0=$(date +%s)
+duration0=$((end0-begin0))
+skip=$((total-ok-fail))
+
+[ $total = 1 ] || {
+[ "$SUMMARY_SHOW" ] && \
+echo "%%SUMMARY_BEGIN:$SUMMARY
+%%SUMMARY_END:">&2
+echo "%%TESTS[$NO_ERROR]: total: $total ok: $ok fail: $fail skip: $skip duration: $duration0 = \
+$(date +%H:%M:%S -d@$duration0 -u) [$(date -d@$end0)]">&2
+
+}
+exit $fail

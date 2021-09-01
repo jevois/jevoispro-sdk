@@ -1,0 +1,40 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable I2C on the AUX connector
+//
+// Enables i2c2 (I2C_EE_M2, uses GPIOZ_14,15, defined as i2c2_master_pins2 in mesong12b.dtsi)
+// On the AUX connector: pin 5 = SDA, pin 6 = SCL, voltage level selected by pin 7, 2k pullups on main board.
+//
+// When not enabled, AUX pin 5 is GPIOZ_14, AUX pin 6 is GPIOZ_15, available as general GPIO pins. When enabled,
+// these pins cannot be used as general GPIO anymore as they are claimed for i2c.
+//
+
+/ {
+	fragment@0 {
+		target = <&i2c2>;
+
+		__overlay__ {
+			status = "okay";
+
+            // Examples of external peripherals that could be attached to the AUX connector and enabled here:
+            
+            // JEVOIS: RTC currently not implemented but could be connected to AUX connector
+	        // hym8563: hym8563@51 {
+	        // 	compatible = "haoyu,hym8563";
+	        // 	reg = <0x51>;
+	        // 	#clock-cells = <0>;
+	        // };
+
+            // JEVOIS: could be use if connecting a touchscreen to AUX connector
+	        // ft5336@38 {
+	        // 	compatible = "edt,edt-ft5336", "ft5x06";
+	        // 	reg = <0x38>;
+	        // 	interrupt_pin = <&gpio GPIOA_5 GPIO_ACTIVE_HIGH>; // JEVOIS: FIXME
+	        // 	reset-gpios = <&gpio_expander 6 GPIO_ACTIVE_HIGH>; // JEVOIS: FIXME
+	        // 	status = "okay";
+	        // };
+		};
+	};
+};

@@ -1,0 +1,7 @@
+config JEVOIS_JVPRO
+	bool "Support JeVois-Pro board"
+	default n
+
+if JEVOIS_JVPRO
+source "board/jevois/jvpro/Kconfig"
+endif
