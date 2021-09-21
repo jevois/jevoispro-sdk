@@ -109,7 +109,7 @@ int main (int argc, char **argv)
   snprintf(dutystr, sizeof(dutystr), "%ld\n", dmax); writefile("/sys/class/pwm/pwmchip8/pwm0/duty_cycle", dutystr);
   writefile("/sys/class/pwm/pwmchip8/pwm0/enable", "1\n");
 
-  sleep(5);
+  sleep(10);
 
   // Throttle down to dmin unless we reach a high temp below:
   duty = dmin;

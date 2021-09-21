@@ -16,7 +16,7 @@ dma_size=2M
 # HDMI resolution auto detection
 # yes - auto detection
 # no  - set HDMI resolution via 'hdmi' node
-hdmi_autodetect=yes
+hdmi_autodetect=no
 
 # HDMI mode
 # Resolution Configuration
@@ -59,7 +59,7 @@ hdmi_autodetect=yes
 #    "2560x1440p60hz"   | 2560x1440 Progressive 60Hz
 #    "2560x1600p60hz"   | 2560x1600 Progressive 60Hz
 #    "3440x1440p60hz"   | 3440x1440 Progressive 60Hz
-hdmi=720p60hz
+hdmi=1080p60hz
 
 # Specify the log level
 # 2 - default, output both kernel logs & system logs

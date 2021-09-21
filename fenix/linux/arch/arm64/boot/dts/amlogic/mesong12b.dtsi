@@ -2193,8 +2193,9 @@
 			groups = "i2c2_sda_z",
 				"i2c2_sck_z";
 			function = "i2c2";
-			bias-pull-up;
-			drive-strength = <2>;
+			//bias-pull-up;
+			bias-disable; // JEVOIS: we have external pull-ups already
+			drive-strength = <3>;
 		};
 	};
 
@@ -2369,7 +2370,7 @@
 				 //"spi1_ss0",
 				 "spi1_clk";
 			function = "spi1";
-			drive-strength = <1>;
+			drive-strength = <3>;
 		};
 	};
 

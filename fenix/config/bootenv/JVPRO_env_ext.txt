@@ -11,9 +11,9 @@ max_freq_a73=2208
 # aux-i2c           -- Enable I2C driver on AUX pins 5 (SDA) and 6 (SCL).
 # aux-onewire       -- Enable OneWire driver on AUX pin 3.
 # aux-spi           -- Enable SPI driver on AUX pins 1 (MOSI), 2 (MISO), 3 (SS), 4 (SCLK).
-# aux-uart          -- Enable UART driver on AUX pins 3 (RX), 4 (TX).
-# icm20948          -- Enable ICM-20948 IMU (present on IMX290 camera board) on JeVois M.2 sensor.
-# imx290            -- Enable Sony IMX290 camera sensor on JeVois M.2 sensor.
+# aux-uart          -- Enable UART driver on AUX pins 1 (RTS), 2 (CTS), 3 (RX), 4 (TX).
+# icm20948          -- Enable ICM-20948 IMU (present on IMX290 camera board) on JeVois M.2 sensor conn.
+# imx290            -- Enable Sony IMX290 camera sensor on JeVois M.2 sensor conn.
 # wifi-bt           -- Enable WIFI/BT M.2 PCIe card, instead of default Myriad-X or Coral-TPU M.2 PCIe card.
 # emmc              -- Enable custom eMMC, only for JeVois dual-TPU + eMMC board.
 # sdio              -- Enable SDIO function on M.2 PCIe port, use with SDIO wifi cards and others.
