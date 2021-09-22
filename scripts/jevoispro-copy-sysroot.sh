@@ -1,19 +1,24 @@
 #!/bin/bash
 set -e # exit on any error
 
+# Check location:
 r="${JEVOISPRO_SDK_ROOT}"
-if [ "X${r}" = "X" -o ! -d "${r}" ]; then echo "JeVoisPro SDK root [${r}] not found -- ABORT"; exit 1; fi
+if [ "X${r}" = "X" ]; then r="/usr/share/jevoispro-sdk"; fi
 echo "Using JeVoisPro SDK root: ${r}"
-sr="${r}/jevoispro-sysroot"
+if [ ! -d "fenix" ]; then echo "Cannot find fenix/ -- ABORT"; exit 2; fi
+
+bdir="fenix/build/rootfs-jevois/rootfs-JVPRO-focal-xfce/"
+if [ ! -d "$bdir" ]; then echo "Cannot find $bdir -- you need to run rebuild-os.sh first -- ABORT"; exit 3; fi
 
 echo "Nuke old jevoispro-sysroot ..."
-cd "${r}"
-sudo /bin/rm -rf jevoispro-sysroot
+if [ ! -d "${r}" ]; then sudo mkdir -p "${r}"; fi
+sr="${r}/jevoispro-sysroot"
+sudo /bin/rm -rf "${sr}"
 
 echo "Create new jevoispro-sysroot ..."
-sudo mkdir jevoispro-sysroot
-cd "${r}/fenix/build/rootfs-jevois/rootfs-JVPRO-focal-xfce/"
+sudo mkdir "${sr}"
 
+cd "${bdir}"
 echo "Copy system ..."
 sudo tar cpf - . | ( cd "${sr}"; sudo tar xpf - )
 
@@ -32,7 +37,7 @@ while [ $didit -eq 1 ]; do
             #echo "   checking $l -> $dest"
             srcdir="$(dirname "$(realpath -s "$l")")"
             #echo "      SRC $srcdir"
-            if [ -e ".$dest" ]; then
+            if [ -e ".$dest" -o -h ".$dest" ]; then
                 destdir="$(dirname "$(realpath -s ".$dest")")"
                 #echo "      DEST $destdir"
                 mod="$(realpath --relative-to="$srcdir" -s ".$dest")"
