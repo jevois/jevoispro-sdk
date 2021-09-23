@@ -56,16 +56,15 @@ sync
 
 # JeVois final fix:
 wget http://jevois.org/pkg/mediapipe-0.8-cp38-none-linux_aarch64.whl
-pip3 install pip --upgrade
-pip3 install numpy --upgrade
-pip3 install dataclasses
-pip3 install mediapipe-0.8-cp38-none-linux_aarch64.whl
+sudo pip3 install pip --upgrade
+sudo pip3 install numpy --upgrade
+sudo pip3 install dataclasses
+sudo pip3 install mediapipe-0.8-cp38-none-linux_aarch64.whl
 rm mediapipe-0.8-cp38-none-linux_aarch64.whl
 
 wget http://jevois.org/pkg/rtl8812au-jevois.tbz
 tar jxf rtl8812au-jevois.tbz
 /bin/rm rtl8812au-jevois.tbz
-dkms add -m 8812au -v 4.2.3
 
 systemctl disable hostapd
 
@@ -75,6 +74,7 @@ cat <<-EOF > jevoispro-fixup.sh
 cd /usr/src/linux-headers-4.9.*/arch
 sudo ln -s arm64 aarch64
 cd /
+dkms add -m 8812au -v 4.2.3
 sudo dkms build -m 8812au -v 4.2.3
 sudo dkms install -m 8812au -v 4.2.3
 sudo systemctl set-default jevoispro.target

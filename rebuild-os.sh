@@ -79,6 +79,14 @@ make
 cd ..
 ./scripts/jevoispro-copy-sysroot.sh
 
+# cleanup a bit:
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/lab
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
+
 # Write the version of this SDK, when compiling JeVois we will check it:
 echo $ver | sudo tee "${r}/jevoispro-sdk-version.txt"
 
@@ -88,14 +96,6 @@ if [ "X$1" = "X-deb" ]; then
     sudo /bin/rm -rf deb
     sudo /usr/bin/mkdir -p deb/usr/share
     sudo /bin/cp -ar /usr/share/jevoispro-sdk deb/usr/share/
-
-    # cleanup a bit:
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/lab
-    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
 
     # Create the deb:
     sudo mkdir deb/DEBIAN
