@@ -1,0 +1,37 @@
+#
+# Normal rules
+#
+.*
+*.orig
+*~
+\#*#
+
+!.dockerignore
+!.github
+!.ignore-update
+!.gitignore
+
+# Git repos
+/linux
+/u-boot
+/rootfs
+/utils
+
+# Downloads
+/archives/debs/
+/archives/ubuntu-base/
+
+# Images
+/images
+
+/build
+/downloads
+/boot
+/archives/ubuntu-mate
+
+*.changes
+*.buildinfo
+/archives/epbox/
+/easy_setup_target/
+
+/*.patch
