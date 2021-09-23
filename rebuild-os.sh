@@ -84,10 +84,20 @@ echo $ver | sudo tee "${r}/jevoispro-sdk-version.txt"
 
 # Optionally create a deb:
 if [ "X$1" = "X-deb" ]; then
-    sudo rm -rf deb
-    sudo mkdir deb
-    sudo cp -ar /usr/share/jevoispro-sdk deb/
+    echo "##### Creating JeVois-Pro SDK deb package #####"
+    sudo /bin/rm -rf deb
+    sudo /usr/bin/mkdir -p deb/usr/share
+    sudo /bin/cp -ar /usr/share/jevoispro-sdk deb/usr/share/
 
+    # cleanup a bit:
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/lab
+    sudo /bin/rm -rf deb/usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
+
+    # Create the deb:
     sudo mkdir deb/DEBIAN
 
     cat >/tmp/control <<EOF
@@ -106,12 +116,9 @@ Description: JeVois-Pro Smart Machine Vision, Software Development Kit developme
 EOF
 
     sudo mv /tmp/control deb/DEBIAN/
-    echo "==== control file is:"
-    cat deb/DEBIAN/control
-    echo "==== control file end"
     
     sudo dpkg-deb --build deb jevoispro-sdk-dev_${pkgversion}_${arch}.deb
-    sudo rm -rf deb
+    sudo /bin/rm -rf deb
     echo "SDK DEBIAN PACKAGE IS: jevoispro-sdk-dev_${pkgversion}_${arch}.deb"
 fi
 
