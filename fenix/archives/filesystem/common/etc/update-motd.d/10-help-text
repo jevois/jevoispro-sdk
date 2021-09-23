@@ -1,0 +1,7 @@
+#!/bin/sh
+
+printf "\n"
+printf " * Website:        https://jevois.org\n"
+printf " * Documentation:  https://jevois.org/doc\n"
+printf " * Forum:          https://jevois.org/qa\n"
+printf "\n"
