@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -75,6 +75,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define gcdRECOVERY_FORCE_TIMEOUT 100
+
+#define gcdPLATFORM_DEVICE_COUNT 4
 
 /*******************************************************************************
 ***** New MMU Defination *******************************************************/
@@ -335,6 +339,13 @@ typedef enum _gceMMU_INIT_MODE
 }
 gceMMU_INIT_MODE;
 
+typedef enum _gceEVENT_FAULT
+{
+    gcvEVENT_NO_FAULT,
+    gcvEVENT_BUS_ERROR_FAULT,
+}
+gceEVENT_FAULT;
+
 /* Create a process database that will contain all its allocations. */
 gceSTATUS
 gckKERNEL_CreateProcessDB(
@@ -550,6 +561,9 @@ struct _gckKERNEL
     /* Pointer to gckHARDWARE object. */
     gckHARDWARE                 hardware;
 
+    /* Hardware type. */
+    gceHARDWARE_TYPE            type;
+
     /* Core */
     gceCORE                     core;
     gctUINT                     chipID;
@@ -645,6 +659,10 @@ struct _gckKERNEL
 
     gctUINT32                   timeoutPID;
     gctBOOL                     threadInitialized;
+    gctPOINTER                  resetStatus;
+
+    /* Platform device ID. */
+    gctUINT32                   pdevID;
 
 #if gcdENABLE_SW_PREEMPTION
     gctPOINTER                  priorityQueueMutex[gcdMAX_PRIORITY_QUEUE_NUM];
@@ -935,6 +953,7 @@ gcsEVENT_QUEUE;
 */
 #define gcdREPO_LIST_COUNT      3
 
+#define gcdEVENT_QUEUE_COUNT    29
 
 /* gckEVENT object. */
 struct _gckEVENT
@@ -960,7 +979,8 @@ struct _gckEVENT
     gctPOINTER                  eventQueueMutex;
 
     /* Array of event queues. */
-    gcsEVENT_QUEUE              queues[29];
+    gcsEVENT_QUEUE              queues[gcdEVENT_QUEUE_COUNT];
+    gctINT32                    totalQueueCount;
     gctINT32                    freeQueueCount;
     gctUINT8                    lastID;
 
@@ -1075,14 +1095,16 @@ gceSTATUS
 gckEVENT_Commit(
     IN gckEVENT Event,
     IN gcsQUEUE_PTR Queue,
-    IN gctBOOL Forced
+    IN gctBOOL Forced,
+    IN gctBOOL Submit
     );
 
 /* Event callback routine. */
 gceSTATUS
 gckEVENT_Notify(
     IN gckEVENT Event,
-    IN gctUINT32 IDs
+    IN gctUINT32 IDs,
+    OUT gceEVENT_FAULT *Fault
     );
 
 /* Event callback routine. */
@@ -1176,6 +1198,7 @@ typedef union _gcuVIDMEM_NODE
         /* Used only when node is not contiguous */
         gctSIZE_T               pageCount;
 
+#if gcdSHARED_PAGETABLE
         /* Used only when node is not contiguous */
         gctPOINTER              pageTables[gcvHARDWARE_NUM_TYPES];
         /* Actual physical address */
@@ -1183,6 +1206,15 @@ typedef union _gcuVIDMEM_NODE
 
         /* Locked counter. */
         gctINT32                lockeds[gcvHARDWARE_NUM_TYPES];
+#else
+        /* Used only when node is not contiguous */
+        gctPOINTER              pageTables[gcvCORE_COUNT];
+        /* Actual physical address */
+        gctUINT32               addresses[gcvCORE_COUNT];
+
+        /* Locked counter. */
+        gctINT32                lockeds[gcvCORE_COUNT];
+#endif
 
         /* MMU page size type */
         gcePAGE_TYPE            pageType;
@@ -1214,8 +1246,13 @@ typedef union _gcuVIDMEM_NODE
 
         /* Information for this chunk. */
         gctSIZE_T               offset;
+#if gcdSHARED_PAGETABLE
         gctUINT32               addresses[gcvHARDWARE_NUM_TYPES];
         gctINT32                lockeds[gcvHARDWARE_NUM_TYPES];
+#else
+        gctUINT32               addresses[gcvCORE_COUNT];
+        gctINT32                lockeds[gcvCORE_COUNT];
+#endif
         gctSIZE_T               bytes;
 
         /* Mapped user logical */
@@ -1292,12 +1329,17 @@ typedef struct _gcsVIDMEM_BLOCK
 
     /* 1M page count. */
     gctUINT32                   pageCount;
+    gctUINT32                   fixedPageCount;
 
     /* Gpu virtual base of this video memory heap. */
+#if gcdSHARED_PAGETABLE
     gctUINT32                   addresses[gcvHARDWARE_NUM_TYPES];
     gctPOINTER                  pageTables[gcvHARDWARE_NUM_TYPES];
+#else
+    gctUINT32                   addresses[gcvCORE_COUNT];
+    gctPOINTER                  pageTables[gcvCORE_COUNT];
+#endif
 
-    /* TODO: */
     gceVIDMEM_TYPE              type;
 
     /* Virtual chunk. */
@@ -1351,6 +1393,7 @@ typedef struct _gcsVIDMEM_NODE
     gckVIDMEM_NODE              tsNode;
     gctUINT32                   tilingMode;
     gctUINT32                   tsMode;
+    gctUINT32                   tsCacheMode;
     gctUINT64                   clearValue;
 
 #if gcdCAPTURE_ONLY_MODE
@@ -1420,8 +1463,10 @@ typedef struct _gcsDEVICE
     /* Process resource database. */
     gckDB                       database;
 
-    /* Same hardware type shares one MMU. */
-    gckMMU                      mmus[gcvHARDWARE_NUM_TYPES];
+#if gcdSHARED_PAGETABLE
+    /* Same hardware type of one platform device shares one MMU. */
+    gckMMU                      mmus[gcdPLATFORM_DEVICE_COUNT][gcvHARDWARE_NUM_TYPES];
+#endif
 
     /* Physical address of internal SRAMs. */
     gctUINT64                   sRAMBases[gcvCORE_COUNT][gcvSRAM_INTER_COUNT];
@@ -1455,6 +1500,9 @@ typedef struct _gcsDEVICE
 
     /* Mutex for per-device power management. */
     gctPOINTER                  powerMutex;
+
+    /* Mutex for recovery all core */
+    gctPOINTER                  recoveryMutex;
 
 #if gcdENABLE_SW_PREEMPTION
     gctPOINTER                  atomPriorityID;
@@ -1817,6 +1865,11 @@ struct _gckMMU
 
     gceMMU_INIT_MODE            initMode;
     gctBOOL                     pageTableOver4G;
+
+    gcePAGE_TYPE                flatMappingMode;
+
+    /* If the stlb is allocated when page size is 16M . */
+    gctBOOL                     stlbAllocated[gcdMMU_STLB_16M_ENTRY_NUM];
 };
 
 
@@ -2107,6 +2160,15 @@ gckKERNEL_GetHardwareType(
     OUT gceHARDWARE_TYPE *Type
     );
 
+#if gcdENABLE_MP_SWITCH
+gceSTATUS
+gckKERNEL_DetectMpModeSwitch(
+    IN gckKERNEL Kernel,
+    IN gceMULTI_PROCESSOR_MODE Mode,
+    OUT gctUINT32 *SwitchMpMode
+    );
+#endif
+
 /******************************************************************************\
 ******************************* gckCONTEXT Object *******************************
 \******************************************************************************/
@@ -2283,6 +2345,16 @@ gckCOMMAND_Execute(
 
 /*
  * Execute reserved space in the command buffer.
+ * End command version.
+ */
+gceSTATUS
+gckCOMMAND_ExecuteEnd(
+    IN gckCOMMAND Command,
+    IN gctUINT32 RequstedBytes
+    );
+
+/*
+ * Execute reserved space in the command buffer.
  * Async FE version.
  */
 gceSTATUS
@@ -2425,6 +2497,7 @@ gceSTATUS
 gckDEVICE_GetMMU(
     IN gckDEVICE Device,
     IN gceHARDWARE_TYPE Type,
+    IN gctUINT32 devIndex,
     IN gckMMU *Mmu
     );
 
@@ -2432,6 +2505,7 @@ gceSTATUS
 gckDEVICE_SetMMU(
     IN gckDEVICE Device,
     IN gceHARDWARE_TYPE Type,
+    IN gctUINT32 devIndex,
     IN gckMMU Mmu
     );
 

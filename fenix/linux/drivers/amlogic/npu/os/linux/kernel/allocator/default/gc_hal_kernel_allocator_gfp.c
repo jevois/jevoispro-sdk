@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -613,8 +613,7 @@ _GFPAlloc(
             gcmkONERROR(_NonContiguousAlloc(mdlPriv, NumPages, gfp));
         }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION (3,6,0) \
-    && (defined(ARCH_HAS_SG_CHAIN) || defined(CONFIG_ARCH_HAS_SG_CHAIN))
+#if gcdUSE_Linux_SG_TABLE_API
         result = sg_alloc_table_from_pages(&mdlPriv->sgt,
                     mdlPriv->nonContiguousPages, NumPages, 0,
                     NumPages << PAGE_SHIFT, GFP_KERNEL);
@@ -654,8 +653,7 @@ _GFPAlloc(
                 _NonContiguousFree(mdlPriv->nonContiguousPages, NumPages);
             }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION (3,6,0) \
-    && (defined (ARCH_HAS_SG_CHAIN) || defined (CONFIG_ARCH_HAS_SG_CHAIN))
+#if gcdUSE_Linux_SG_TABLE_API
             sg_free_table(&mdlPriv->sgt);
 #else
             kfree(mdlPriv->sgt.sgl);
@@ -681,7 +679,6 @@ _GFPAlloc(
     for (i = 0; i < NumPages; i++)
     {
         struct page *page;
-        gctPHYS_ADDR_T phys = 0U;
 
         if (contiguous)
         {
@@ -693,8 +690,6 @@ _GFPAlloc(
         }
 
         SetPageReserved(page);
-
-        phys = page_to_phys(page);
 
         /*for amlogic board, the page phys maybe start from 0x0000-0000*/
         /*BUG_ON(!phys);*/
@@ -824,8 +819,7 @@ _GFPFree(
         dma_unmap_sg(galcore_device, mdlPriv->sgt.sgl, mdlPriv->sgt.nents,
                 DMA_FROM_DEVICE);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION (3,6,0) \
-    && (defined (ARCH_HAS_SG_CHAIN) || defined (CONFIG_ARCH_HAS_SG_CHAIN))
+#if gcdUSE_Linux_SG_TABLE_API
         sg_free_table(&mdlPriv->sgt);
 #else
         kfree(mdlPriv->sgt.sgl);
@@ -1010,7 +1004,7 @@ _GFPUnmapUser(
                 );
     }
 #else
-    down_write(&current->mm->mmap_sem);
+    down_write(&current_mm_mmap_sem);
     if (do_munmap(current->mm, (unsigned long)MdlMap->vmaAddr, Size) < 0)
     {
         gcmkTRACE_ZONE(
@@ -1019,10 +1013,11 @@ _GFPUnmapUser(
                 __FUNCTION__, __LINE__
                 );
     }
-    up_write(&current->mm->mmap_sem);
+    up_write(&current_mm_mmap_sem);
 #endif
 
     MdlMap->vma = NULL;
+    MdlMap->vmaAddr = NULL;
 }
 
 static gceSTATUS
@@ -1039,21 +1034,25 @@ _GFPMapUser(
     gcmkHEADER_ARG("Allocator=%p Mdl=%p Cacheable=%d", Allocator, Mdl, Cacheable);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)
+#if gcdANON_FILE_FOR_ALLOCATOR
+    userLogical = (gctPOINTER)vm_mmap(Allocator->anon_file,
+#else
     userLogical = (gctPOINTER)vm_mmap(NULL,
+#endif
                     0L,
                     Mdl->numPages * PAGE_SIZE,
                     PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_NORESERVE,
                     0);
 #else
-    down_write(&current->mm->mmap_sem);
+    down_write(&current_mm_mmap_sem);
     userLogical = (gctPOINTER)do_mmap_pgoff(NULL,
                     0L,
                     Mdl->numPages * PAGE_SIZE,
                     PROT_READ | PROT_WRITE,
                     MAP_SHARED,
                     0);
-    up_write(&current->mm->mmap_sem);
+    up_write(&current_mm_mmap_sem);
 #endif
 
     gcmkTRACE_ZONE(
@@ -1077,7 +1076,8 @@ _GFPMapUser(
         gcmkONERROR(gcvSTATUS_OUT_OF_MEMORY);
     }
 
-    down_write(&current->mm->mmap_sem);
+    down_write(&current_mm_mmap_sem);
+
     do
     {
         struct vm_area_struct *vma = find_vma(current->mm, (unsigned long)userLogical);
@@ -1097,7 +1097,8 @@ _GFPMapUser(
         MdlMap->vma = vma;
     }
     while (gcvFALSE);
-    up_write(&current->mm->mmap_sem);
+
+    up_write(&current_mm_mmap_sem);
 
     if (gcmIS_SUCCESS(status))
     {
@@ -1108,7 +1109,8 @@ _GFPMapUser(
 OnError:
     if (gcmIS_ERROR(status) && userLogical)
     {
-        _GFPUnmapUser(Allocator, Mdl, userLogical, Mdl->numPages * PAGE_SIZE);
+        MdlMap->vmaAddr = userLogical;
+        _GFPUnmapUser(Allocator, Mdl, MdlMap, Mdl->numPages * PAGE_SIZE);
     }
     gcmkFOOTER();
     return status;
@@ -1355,6 +1357,11 @@ _GFPAlloctorInit(
     gceSTATUS status;
     gckALLOCATOR allocator = gcvNULL;
     struct gfp_alloc *priv = gcvNULL;
+
+    if (Os->iommu)
+    {
+        gcmkONERROR(gcvSTATUS_NOT_SUPPORTED);
+    }
 
     gcmkONERROR(
         gckALLOCATOR_Construct(Os, &GFPAllocatorOperations, &allocator));

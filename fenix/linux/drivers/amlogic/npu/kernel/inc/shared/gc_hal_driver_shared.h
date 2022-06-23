@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -60,6 +60,10 @@
 #include "gc_hal_types_shared.h"
 
 
+#if defined(__QNXNTO__)
+#include <sys/siginfo.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -71,7 +75,7 @@ extern "C" {
 #define gcdCONTEXT_BUFFER_COUNT 2
 #endif
 
-#define gcdMAX_MAJOR_CORE_COUNT         8
+#define gcdMAX_MAJOR_CORE_COUNT         gcdCORE_3D_COUNT
 
 #define gcdRENDER_FENCE_LENGTH          (6 * gcmSIZEOF(gctUINT32))
 #define gcdBLT_FENCE_LENGTH             (10 * gcmSIZEOF(gctUINT32))
@@ -105,6 +109,9 @@ typedef struct _gcsHAL_CHIP_INFO
     OUT gctUINT32               ids[gcvCORE_COUNT];
 
     OUT gctUINT32               coreIndexs[gcvCORE_COUNT];
+
+    /* Hardware device ID. */
+    OUT gctUINT32               hwDevIDs[gcvCORE_COUNT];
 }
 gcsHAL_CHIP_INFO;
 
@@ -202,6 +209,9 @@ typedef struct _gcsHAL_QUERY_CHIP_IDENTITY
 
     /* Number of instructions. */
     gctUINT32                   instructionCount;
+
+    /* Number of PS instructions. */
+    gctUINT32                   PSInstructionCount;
 
     /* Number of constants. */
     gctUINT32                   numConstants;
@@ -366,9 +376,6 @@ typedef struct _gcsUSER_MEMORY_DESC
     gctUINT64                  logical;
     gctUINT64                  physical;
     gctUINT32                  size;
-
-    /* gcvALLOC_FLAG_EXTERNAL_MEMORY */
-    gcsEXTERNAL_MEMORY_INFO    externalMemoryInfo;
 }
 gcsUSER_MEMORY_DESC;
 
@@ -689,6 +696,13 @@ typedef struct _gcsHAL_COMMIT
     /* Brother cores in user device of current commit process. */
     gctUINT32                   broCoreMask;
 
+#if gcdENABLE_MP_SWITCH
+    /* Multi-processor mode. */
+    gctUINT32                   mpMode;
+
+    /* Switch multi-processor mode. */
+    gctUINT32                   switchMpMode;
+#endif
 
 #if gcdENABLE_SW_PREEMPTION
     /* If user need to merge the delta. */
@@ -745,8 +759,8 @@ typedef struct _gcsHAL_SIGNAL
     IN gctUINT64                process;
 
 #if defined(__QNXNTO__)
-    /* Client pulse side-channel connection ID. Set by client in gcoOS_CreateSignal. */
-    IN gctINT32                 coid;
+    /* Client pulse event. */
+    IN struct sigevent          event;
 
     /* Set by server. */
     IN gctINT32                 rcvid;
@@ -843,6 +857,8 @@ typedef struct _gcsHAL_GET_PROFILE_SETTING
     OUT gctBOOL                 enable;
     /* Profile mode */
     OUT gceProfilerMode         profileMode;
+    /* Probe mode */
+    OUT gceProbeMode            probeMode;
 }
 gcsHAL_GET_PROFILE_SETTING;
 
@@ -853,6 +869,8 @@ typedef struct _gcsHAL_SET_PROFILE_SETTING
     IN gctBOOL                  enable;
     /* Profile mode */
     IN gceProfilerMode          profileMode;
+    /* Probe mode */
+    IN gceProbeMode             probeMode;
 }
 gcsHAL_SET_PROFILE_SETTING;
 
@@ -916,6 +934,7 @@ gcsHAL_QUERY_POWER_MANAGEMENT;
 typedef struct _gcsHAL_CONFIG_POWER_MANAGEMENT
 {
     IN gctBOOL                  enable;
+    OUT gctBOOL                 oldValue;
 }
 gcsHAL_CONFIG_POWER_MANAGEMENT;
 

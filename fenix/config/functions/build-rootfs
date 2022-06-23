@@ -1,3 +1,4 @@
+# -*-sh-*-
 # Functions:
 # install_common
 # install_distribution_specific
@@ -340,10 +341,14 @@ create_rootfs_cache()
 	create_sources_list "$DISTRIB_RELEASE" "$ROOTFS_TEMP/"
     mkdir -p ${ROOTFS_TEMP}/etc/apt/sources.list.d
 
+    # JEVOIS: problem with ca-certificates, need to reinstall
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y update"'
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y install --reinstall ca-certificates"'
+
     # JEVOIS: add source for jevois packages. Since it is an https repo, bypass apt-cacher-ng:
     apt_extra="${apt_extra} -o Acquire::https::Proxy=DIRECT"
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
-    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/apt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
+    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/devapt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/jevois.list update"'
     echo "JEVOIS: added jevois.usc.edu deb source for jevois packages."
 
@@ -513,7 +518,9 @@ prepare_partitions()
 		local bootfs_uuid="UUID=$(blkid -s UUID -o value $IMAGE_LOOP_DEV_BOOT)"
 	elif [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" == "JVPRO" ]; then
 		#IMAGE_SIZE=$((rootfs_image_size + 300 + 16384)) # JEVOIS SD/USB image size = BOOT(256MB) + ROOTFS + JEVOIS (16GB)
-		IMAGE_SIZE=60946 # JEVOIS: for 64GB sd card, should finely adjust based on real capacity
+		#IMAGE_SIZE=60946 # JEVOIS: for 64GB sd card, should finely adjust based on real capacity
+		#IMAGE_SIZE=60700 # JEVOIS: for 64GB sd card, slightly smaller for people using Sandisk cards...
+		IMAGE_SIZE=59000 # JEVOIS: for 64GB sd card, slightly smaller for people using smaller cards...
         
 		info_msg "Create SD/USB image..."
 		dd if=/dev/zero of=${BUILD_IMAGES}/${IMAGE_FILE_NAME} bs=1M count=0 seek=$IMAGE_SIZE

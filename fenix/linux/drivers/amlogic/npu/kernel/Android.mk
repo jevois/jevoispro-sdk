@@ -1,6 +1,6 @@
 ##############################################################################
 #
-#    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+#    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 #
 #    The material in this file is confidential and contains trade secrets
 #    of Vivante Corporation. This is proprietary information owned by
@@ -72,8 +72,6 @@ LOCAL_MODULE_CLASS  := SHARED_LIBRARIES
 LOCAL_STRIP_MODULE  := false
 include $(BUILD_PREBUILT)
 
-include $(AQROOT)/copy_installed_module.mk
-
 else
 
 include $(CLEAR_VARS)
@@ -81,7 +79,6 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
           gc_hal_kernel_command.c \
           gc_hal_kernel_db.c \
-          gc_hal_kernel_debug.c \
           gc_hal_kernel_event.c \
           gc_hal_kernel_heap.c \
           gc_hal_kernel.c \

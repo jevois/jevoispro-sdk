@@ -299,7 +299,9 @@ PACKAGE_LIST_JEVOIS_COMPILE_OPENCV="build-essential gcc-10 g++-10 gfortran-10 py
     python3-pip libgtk-3-dev libatlas-base-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
     libtesseract-dev tesseract-ocr-all libleptonica-dev liblapacke-dev libavresample-dev qt5-default \
     libopenblas-dev libopenblas-openmp-dev pylint libopenjp2-7-dev libopenjpip7 libopenjp3d7 libopenjp2-tools \
-    libopenjp3d-tools libcaffe-cpu-dev gdb dkms"
+    libopenjp3d-tools libcaffe-cpu-dev gdb dkms libssl-dev ca-certificates git-lfs libboost-regex-dev \
+    libgtk2.0-dev pkg-config unzip automake libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev \
+    libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev"
 
 # libqt4-dev
 
@@ -330,6 +332,7 @@ PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-st
 
 # Pre-install jevois and jevoisbase:
 PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform jevoispro-fan"
+#PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-fan"
 
 PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACKAGE_LIST_JEVOIS_COMPILE} \
     ${PACKAGE_LIST_JEVOIS_SOFTWARE}"

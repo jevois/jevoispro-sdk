@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -15,6 +15,10 @@
 #define __gc_hal_driver_vg_shared_h_
 
 #include "gc_hal_types.h"
+
+#if defined(__QNXNTO__)
+#include <sys/siginfo.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -148,7 +152,7 @@ typedef struct _gcsTASK_SIGNAL
     IN gctSIGNAL                signal;
 
 #if defined(__QNXNTO__)
-    IN gctINT32                 coid;
+    IN struct sigevent          event;
     IN gctINT32                 rcvid;
 #endif
 }
@@ -192,7 +196,7 @@ typedef struct _gcsTASK_FREE_VIDEO_MEMORY
     IN gceTASK                  id;
 
     /* Allocated video memory. */
-    IN gctUINT32                node;
+    IN gctUINT64                node;
 }
 gcsTASK_FREE_VIDEO_MEMORY;
 

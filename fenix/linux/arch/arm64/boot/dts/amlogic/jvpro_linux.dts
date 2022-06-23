@@ -1537,11 +1537,11 @@
 // NOTE: we connect GPIOC_7 to PCIECK_REQN but it looks like maybe the software does not support this
 // (GPIOC_7 is only defined as world_sync_c_pins in pinctrl-meson-g12a.c)
 &pcie_A {
-	reset-gpio = <&gpio GPIOA_7 GPIO_ACTIVE_HIGH>; // PERST0# (JEVOIS: used by TPU1, WIFI cards, etc)
-	reset2-gpio = <&gpio GPIOZ_8 GPIO_ACTIVE_HIGH>; // WIFI_RESET; JEVOIS only: reset a second device (e.g., TPU2)
-	power1-gpio = <&gpio GPIOX_6 GPIO_ACTIVE_HIGH>; // JEVOIS only: power on a device (e.g., TPU1)
-	power2-gpio = <&gpio GPIOX_17 GPIO_ACTIVE_HIGH>; // JEVOIS only: power on a device (e.g., TPU2)
-	status = "okay";
+    reset-gpio = <&gpio GPIOA_7 GPIO_ACTIVE_HIGH>; // PERST0# (JEVOIS: used by TPU1, WIFI cards, etc)
+    reset2-gpio = <&gpio GPIOZ_8 GPIO_ACTIVE_HIGH>; // WIFI_RESET; JEVOIS only: reset a second device (e.g., TPU2)
+    power1-gpio = <&gpio GPIOX_6 GPIO_ACTIVE_HIGH>; // JEVOIS only: power on a device (e.g., TPU1)
+    power2-gpio = <&gpio GPIOX_17 GPIO_ACTIVE_HIGH>; // JEVOIS only: power on a device (e.g., TPU2)
+    status = "okay";
 };
 
 // JEVOIS: the SARADC converter is not connected.

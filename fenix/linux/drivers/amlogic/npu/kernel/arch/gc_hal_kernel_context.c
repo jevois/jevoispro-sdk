@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -149,12 +149,12 @@
         gcvFALSE, gcvFALSE                                                     \
         )
 
-#define _STATE_INIT_VALUE_1(reg, value)                                        \
+#define _STATE_INIT_VALUE_OFFSET(reg, offset, value)                           \
     _State(\
         Context, index, \
-        (reg ## _Address >> 2) + 1, \
+        (reg ## _Address >> 2) + offset, \
         value, \
-        reg ## _Count, \
+        1, \
         gcvFALSE, gcvFALSE                                                     \
         )
 
@@ -3320,11 +3320,14 @@ _InitializeContextBuffer(
     gctBOOL multiCluster;
     gctBOOL smallBatch;
     gctBOOL multiCoreBlockSetCfg2;
-    gctUINT clusterAliveMask[2];
+    gctUINT clusterAliveMask[gcdMAX_MAJOR_CORE_COUNT];
     gctBOOL hasPSCSThrottle;
     gctBOOL hasMsaaFragOperation;
     gctBOOL newGPipe;
     gctBOOL computeOnly;
+#if gcdSYNC && gcdENDIAN_BIG
+    gctUINT PEFenceEndianControl;
+#endif
 #endif
 
     gckHARDWARE hardware;
@@ -3377,12 +3380,20 @@ _InitializeContextBuffer(
     multiCluster = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_MULTI_CLUSTER);
     smallBatch = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_SMALL_BATCH) && hardware->options.smallBatch;
     multiCoreBlockSetCfg2 = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_MULTI_CORE_BLOCK_SET_CONFIG2);
-    clusterAliveMask[0] = hardware->identity.clusterAvailMask & hardware->options.userClusterMasks[0];
-    clusterAliveMask[1] = hardware->identity.clusterAvailMask & hardware->options.userClusterMasks[1];
     hasPSCSThrottle = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_PSCS_THROTTLE);
     hasMsaaFragOperation = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_MSAA_FRAGMENT_OPERATION);
     newGPipe = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_NEW_GPIPE);
     computeOnly = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_COMPUTE_ONLY);
+#if gcdSYNC && gcdENDIAN_BIG
+    PEFenceEndianControl = gckHARDWARE_IsFeatureAvailable(hardware, gcvFEATURE_FENCE_64BIT)
+                                                           ? 0x3
+                                                           : 0x2;
+#endif
+
+    for (i = 0; i < gcdMAX_MAJOR_CORE_COUNT; i++)
+    {
+        clusterAliveMask[i] = hardware->identity.clusterAvailMask & hardware->options.userClusterMasks[i];
+    }
 
     /* Multi render target. */
     if (Context->hardware->identity.chipModel == gcv880 &&
@@ -3441,29 +3452,20 @@ _InitializeContextBuffer(
 
     if (multiCluster)
     {
-        index += _State(Context, index, 0x03910 >> 2, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
+        for (i = 0; i < hardware->kernel->device->coreNum; i++)
+        {
+            index += _State(Context, index, (0x03910 >> 2) + i, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
  7:0) - (0 ?
  7:0) + 1) == 32) ?
  ~0U : (~(~0U << ((1 ?
  7:0) - (0 ?
  7:0) + 1))))))) << (0 ?
- 7:0))) | (((gctUINT32) ((gctUINT32) (clusterAliveMask[0]) & ((gctUINT32) ((((1 ?
+ 7:0))) | (((gctUINT32) ((gctUINT32) (clusterAliveMask[i]) & ((gctUINT32) ((((1 ?
  7:0) - (0 ?
  7:0) + 1) == 32) ?
  ~0U : (~(~0U << ((1 ?
- 7:0) - (0 ? 7:0) + 1))))))) << (0 ? 7:0))), 4, gcvFALSE, gcvFALSE);
-
-        index += _State(Context, index, (0x03910 >> 2) + 1, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
- 7:0) - (0 ?
- 7:0) + 1) == 32) ?
- ~0U : (~(~0U << ((1 ?
- 7:0) - (0 ?
- 7:0) + 1))))))) << (0 ?
- 7:0))) | (((gctUINT32) ((gctUINT32) (clusterAliveMask[1]) & ((gctUINT32) ((((1 ?
- 7:0) - (0 ?
- 7:0) + 1) == 32) ?
- ~0U : (~(~0U << ((1 ?
- 7:0) - (0 ? 7:0) + 1))))))) << (0 ? 7:0))), 4, gcvFALSE, gcvFALSE);
+ 7:0) - (0 ? 7:0) + 1))))))) << (0 ? 7:0))), 1, gcvFALSE, gcvFALSE);
+        }
 
         index += _State(Context, index, 0x03908 >> 2, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
  2:0) - (0 ?
@@ -3875,9 +3877,35 @@ _InitializeContextBuffer(
     if (multiCluster)
     {
         index += _State(Context, index, 0x00AAC >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
+        index += _State(Context, index, 0x03A00 >> 2, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
+ 2:0) - (0 ?
+ 2:0) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 2:0) - (0 ?
+ 2:0) + 1))))))) << (0 ?
+ 2:0))) | (((gctUINT32) (0x7 & ((gctUINT32) ((((1 ?
+ 2:0) - (0 ?
+ 2:0) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 2:0) - (0 ?
+ 2:0) + 1))))))) << (0 ?
+ 2:0))) | ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
+ 31:28) - (0 ?
+ 31:28) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 31:28) - (0 ?
+ 31:28) + 1))))))) << (0 ?
+ 31:28))) | (((gctUINT32) ((gctUINT32) (0xf) & ((gctUINT32) ((((1 ?
+ 31:28) - (0 ?
+ 31:28) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 31:28) - (0 ? 31:28) + 1))))))) << (0 ? 31:28))), 1, gcvFALSE, gcvFALSE);
+    }
+    else
+    {
+        index += _State(Context, index, 0x03A00 >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
     }
 
-    index += _State(Context, index, 0x03A00 >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
     index += _State(Context, index, 0x03A04 >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
     index += _State(Context, index, 0x03A08 >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
 
@@ -4251,9 +4279,27 @@ _InitializeContextBuffer(
         /* if (Context->hardware->identity.instructionCount <= 256). This is non-unified one. */
         else
         {
+            if (Context->hardware->identity.PSInstructionCount > Context->hardware->identity.instructionCount)
+            {
+                gcmkASSERT(Context->hardware->identity.PSInstructionCount % 256 == 0);
+
+                /* We can support at most 1024 bytes for a single LOAD_STATE. */
+                for (i = 0;
+                     i < Context->hardware->identity.PSInstructionCount << 2;
+                     i += 256 << 2
+                     )
+                {
+                    index += _State(Context, index, (0x08000 >> 2) + i, 0x00000000, 256 << 2, gcvFALSE, gcvFALSE);
+                    index += _CLOSE_RANGE();
+                }
+            }
+            else
+            {
+                index += _State(Context, index, 0x06000 >> 2, 0x00000000, 1024, gcvFALSE, gcvFALSE);
+                index += _CLOSE_RANGE();
+            }
+
             index += _State(Context, index, 0x04000 >> 2, 0x00000000, 1024, gcvFALSE, gcvFALSE);
-            index += _CLOSE_RANGE();
-            index += _State(Context, index, 0x06000 >> 2, 0x00000000, 1024, gcvFALSE, gcvFALSE);
             index += _CLOSE_RANGE();
         }
     }
@@ -4418,7 +4464,21 @@ _InitializeContextBuffer(
 
     if (halti3)
     {
+#if gcdSYNC && gcdENDIAN_BIG
+        index += _State(Context, index, 0x014BC >> 2, ((((gctUINT32) (0)) & ~(((gctUINT32) (((gctUINT32) ((((1 ?
+ 10:9) - (0 ?
+ 10:9) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 10:9) - (0 ?
+ 10:9) + 1))))))) << (0 ?
+ 10:9))) | (((gctUINT32) ((gctUINT32) (PEFenceEndianControl) & ((gctUINT32) ((((1 ?
+ 10:9) - (0 ?
+ 10:9) + 1) == 32) ?
+ ~0U : (~(~0U << ((1 ?
+ 10:9) - (0 ? 10:9) + 1))))))) << (0 ? 10:9))), 1, gcvFALSE, gcvFALSE);
+#else
         index += _State(Context, index, 0x014BC >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
+#endif
     }
 
     if (halti4)

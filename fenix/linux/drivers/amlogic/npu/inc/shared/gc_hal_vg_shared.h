@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -13,6 +13,10 @@
 
 #ifndef __gc_hal_shared_vg_h_
 #define __gc_hal_shared_vg_h_
+
+#if defined(__QNXNTO__)
+#include <sys/siginfo.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -119,7 +123,7 @@ typedef struct _gcsVGCONTEXT
 
 #if defined(__QNXNTO__)
     gctSIGNAL                   userSignal;
-    gctINT32                    coid;
+    struct sigevent             event;
     gctINT32                    rcvid;
 #endif
 }
@@ -163,7 +167,7 @@ typedef struct _gcsTASK_MASTER_TABLE
     gctUINT                     size;
 
 #if defined(__QNXNTO__)
-    gctINT32                    coid;
+    struct sigevent             event;
     gctINT32                    rcvid;
 #endif
 }

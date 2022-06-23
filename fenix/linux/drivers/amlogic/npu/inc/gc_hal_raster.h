@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -987,6 +987,18 @@ gco2D_SetTargetTileStatus(
     );
 
 gceSTATUS
+gco2D_SetSourceCacheMode(
+    IN gco2D Engine,
+    IN gceCACHE_MODE CacheMode
+    );
+
+gceSTATUS
+gco2D_SetTargetCacheMode(
+    IN gco2D Engine,
+    IN gceCACHE_MODE CacheMode
+    );
+
+gceSTATUS
 gco2D_QueryU32(
     IN gco2D Engine,
     IN gce2D_QUERY Item,
@@ -1069,6 +1081,51 @@ gceSTATUS
 gco2D_SetTargetEndianMode(
     IN gco2D Engine,
     IN gceENDIAN_MODE eEndianMode
+    );
+
+gceSTATUS
+gco2D_GetActiveCoreIndex(
+    IN gco2D Engine,
+    OUT gctUINT32 *ActiveCoreIndex
+    );
+
+gceSTATUS
+gco2D_SetActiveCoreIndex(
+    IN gco2D Engine,
+    IN gctUINT32 ActiveCoreIndex
+    );
+
+gceSTATUS
+gco2D_SetMeanValue(
+    IN gco2D Engine,
+    IN gctINT32 R,
+    IN gctINT32 G,
+    IN gctINT32 B
+    );
+
+gceSTATUS
+gco2D_SetStdRerciprocal(
+    IN gco2D Engine,
+    IN gctINT32 R,
+    IN gctINT32 G,
+    IN gctINT32 B
+    );
+
+gceSTATUS
+gco2D_SetInitError(
+    IN gco2D Engine,
+    IN gctBOOL GDIStretch,
+    IN gctUINT currentSrcIndex,
+    IN OUT gcsRECT_PTR SplitSrcRectL,
+    IN OUT gcsRECT_PTR SplitSrcRectR,
+    IN OUT gcsRECT_PTR SplitDstRectL,
+    IN OUT gcsRECT_PTR SplitDstRectR
+    );
+
+gceSTATUS
+gco2D_SetScaleFactor(
+    IN gco2D Engine,
+    IN gctUINT32 ScaleFactor
     );
 
 #ifdef __cplusplus

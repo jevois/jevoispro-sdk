@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -17,19 +17,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define gcdEXTERNAL_MEMORY_NAME_MAX 32
-#define gcdEXTERNAL_MEMORY_DATA_MAX 8
-
-typedef struct _gcsEXTERNAL_MEMORY_INFO
-{
-    /* Name of allocator used to attach this memory. */
-    gctCHAR                allocatorName[gcdEXTERNAL_MEMORY_NAME_MAX];
-
-    /* User defined data which will be passed to allocator. */
-    gctUINT32              userData[gcdEXTERNAL_MEMORY_DATA_MAX];
-}
-gcsEXTERNAL_MEMORY_INFO;
 
 #define gcdBINARY_TRACE_MESSAGE_SIZE 240
 

@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -123,6 +123,13 @@ typedef struct _gcoBUFOBJ *             gcoBUFOBJ;
 
 #define gcdATTRIBUTE_COUNT              32
 #define gcdVERTEXARRAY_POOL_CAPACITY    32
+
+#define gcdSTREAM_POOL_SIZE      128
+#define gcdSTREAM_GROUP_SIZE     16
+#define gcdSTREAM_SIGNAL_NUM \
+    (\
+        (gcdSTREAM_POOL_SIZE + gcdSTREAM_GROUP_SIZE - 1) / gcdSTREAM_GROUP_SIZE \
+    )
 
 #define gcvPORGRAM_STAGE_GPIPE (gcvPROGRAM_STAGE_VERTEX_BIT | \
                                 gcvPROGRAM_STAGE_TCS_BIT    | \
@@ -1531,6 +1538,7 @@ typedef struct _gcsTHREAD_WALKER_INFO
     gctUINT32   groupNumberUniformIdx;
     gctUINT32   baseAddress;
     gctBOOL     bDual16;
+    gctBOOL     bVipSram;
 }
 gcsTHREAD_WALKER_INFO;
 
@@ -1600,6 +1608,8 @@ typedef struct _gcsVX_IMAGE_INFO
 #if gcdVX_OPTIMIZER
     gctUINT32       uniformData[3][4];
 #endif
+    /* the uniform data type of save nbg */
+    gctUINT32       uniformSaveDataType;
 }
 gcsVX_IMAGE_INFO;
 typedef struct _gcsVX_DISTRIBUTION_INFO * gcsVX_DISTRIBUTION_INFO_PTR;
@@ -1904,6 +1914,9 @@ typedef struct _gcsTEXTURE
 
     gcuVALUE                    borderColor[4];
     gctBOOL                     descDirty;
+
+    /* texture stage */
+    gctINT                      stage;
 }
 gcsTEXTURE, * gcsTEXTURE_PTR;
 
@@ -1936,6 +1949,7 @@ gceSTATUS
 gcoTEXTURE_ConstructSized(
     IN gcoHAL Hal,
     IN gceSURF_FORMAT Format,
+    IN gceTILING Tiling,
     IN gctUINT Width,
     IN gctUINT Height,
     IN gctUINT Depth,
@@ -2118,6 +2132,12 @@ gcoTEXTURE_Disable(
     IN gcoHAL Hal,
     IN gctINT Sampler,
     IN gctBOOL DefaultInteger
+    );
+
+gceSTATUS
+gcoTEXTURE_Clear(
+    IN gcoTEXTURE Texture,
+    IN gctINT MipMap
     );
 
 gceSTATUS
@@ -2433,6 +2453,9 @@ typedef struct _gcsATTRIBUTE
     /* Divisor of the attribute */
     gctUINT             divisor;
 
+    /* Offset of the attribute */
+    gctUINT             offset;
+
     /* Pointer to the attribute data. */
     gctCONST_POINTER    pointer;
 
@@ -2455,6 +2478,7 @@ typedef struct _gcsATTRIBUTE
 
     /* Index to vertex array */
     gctINT              arrayIdx;
+    gctINT              arrayLoc[32];
 
     gceATTRIB_SCHEME    convertScheme;
 
@@ -2730,9 +2754,16 @@ gcoBUFOBJ_SetBufferEndianHint(
     IN gcoBUFOBJ BufObj
     );
 
-/*  Sets a buffer object as dirty */
+/*  Query a buffer object dirty status */
 gceSTATUS
 gcoBUFOBJ_SetDirty(
+    IN gcoBUFOBJ BufObj,
+    IN gctBOOL Dirty
+    );
+
+/*  Sets a buffer object as dirty */
+gctBOOL
+gcoBUFOBJ_IsDirty(
     IN gcoBUFOBJ BufObj
     );
 

@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -57,8 +57,32 @@ typedef enum SHS_PRIV_CONSTANT_KIND
     SHS_PRIV_CONSTANT_KIND_DEFAULT_UBO_ADDRESS              = 27,
     SHS_PRIV_CONSTANT_KIND_THREAD_ID_MEM_ADDR               = 28,
     SHS_PRIV_CONSTANT_KIND_ENQUEUED_LOCAL_SIZE              = 29,
+    SHS_PRIV_CONSTANT_KIND_BASE_VERTEX                      = 30,
+    SHS_PRIV_CONSTANT_KIND_EXTRA_IMAGE_INFO1                = 31,
+    SHS_PRIV_CONSTANT_KIND_HW_IMAGE_SIZE                    = 32,
+    SHS_PRIV_CONSTANT_KIND_CONST_BORDER_VALUE               = 33,
+    SHS_PRIV_CONSTANT_KIND_IMAGE_ADDR                       = 34,
+    SHS_PRIV_CONSTANT_KIND_ADDR_MODE_NONE_IMAGE             = 35,
     SHS_PRIV_CONSTANT_KIND_COUNT, /* last member, add new kind beofre this */
 }SHS_PRIV_CONSTANT_KIND;
+
+#define SHS_PRIV_CONST_IsHasParentImageOrSampler(kind)          \
+    ((kind) == SHS_PRIV_CONSTANT_KIND_IMAGE_SIZE            ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_HW_IMAGE_SIZE         ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_EXTRA_IMAGE_INFO1     ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_TEXTURE_SIZE          ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_LOD_MIN_MAX           ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_LEVELS_SAMPLES        ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_ADDR_MODE_NONE_IMAGE  ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_IMAGE_ADDR)
+
+#define SHS_PRIV_CONST_IsImageDerivedInfo(kind)                 \
+    ((kind) == SHS_PRIV_CONSTANT_KIND_IMAGE_SIZE            ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_HW_IMAGE_SIZE         ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_LEVELS_SAMPLES        ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_EXTRA_IMAGE_INFO1     ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_ADDR_MODE_NONE_IMAGE  ||  \
+     (kind) == SHS_PRIV_CONSTANT_KIND_IMAGE_ADDR)
 
 /* Shader mem static priv-mapping kind */
 typedef enum SHS_PRIV_MEM_KIND
@@ -88,7 +112,7 @@ typedef struct SHADER_PRIV_MAPPING_COMMON_ENTRY
     gctUINT                                     privmKindIndex;
 
     /* For some flags, they will have their private data to tell driver how to do. */
-    gctBOOL                                     notAllocated;
+    gctBOOL                                     bNotAllocated;
     void*                                       pPrivateData;
 }
 SHADER_PRIV_MAPPING_COMMON_ENTRY;
@@ -249,6 +273,7 @@ typedef struct SHADER_DYNAMIC_PRIV_MAPPING
 typedef enum SHS_DEFAULT_UBO_MEMBER_KIND
 {
     SHS_DEFAULT_UBO_MEMBER_PRIV_CONST           = 0,
+    SHS_DEFAULT_UBO_MEMBER_KERNEL_ARG_IMAGE     = 1,
 }SHS_DEFAULT_UBO_MEMBER_KIND;
 
 typedef struct SHADER_DEFAULT_UBO_MEMBER_ENTRY

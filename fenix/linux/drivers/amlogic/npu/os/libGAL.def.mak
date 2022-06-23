@@ -1,6 +1,6 @@
 ##############################################################################
 #
-#    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+#    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 #
 #    The material in this file is confidential and contains trade secrets
 #    of Vivante Corporation. This is proprietary information owned by
@@ -24,6 +24,7 @@ EXPORTS
     gcoOS_AcquireMutex
     gcoOS_AddSignalHandler
     gcoOS_Allocate
+    gcoOS_Realloc
     gcoOS_AllocateMemory
     gcoOS_AllocateSharedMemory
     gcoOS_AtomConstruct
@@ -51,6 +52,7 @@ EXPORTS
     gcoOS_DestroySignal
     gcoOS_DeviceControl
     gcoOS_EnableDebugBuffer
+    gcoOS_QueryCurrentProcessName
     gcoOS_Flush
     gcoOS_Free
     gcoOS_FreeLibrary
@@ -255,6 +257,7 @@ EXPORTS
     gcoHAL_QuerySuperTileMode
     gcoHAL_QueryChipLimits
     gcoHAL_QueryPowerManagementState
+    gcoHAL_ConfigPowerManagement
     gcoHAL_QueryTiled
     gcoHAL_QueryVideoMemory
     gcoHAL_ScheduleEvent
@@ -281,7 +284,11 @@ EXPORTS
     gcoHAL_GetPriority
     gcoHAL_GetLastCommitStatus
     gcoHAL_SetLastCommitStatus
+    gcoHAL_CommitDone
     gcoHAL_IsFlatMapped
+    gcoHAL_QueryMCFESemaphoreCapacity
+    gcoHAL_CommandBufferAutoCommit
+    gcoHAL_CommandBufferAutoSync
 
 !IF "$(VIVANTE_ENABLE_3D)" == "1"
     gcoHAL_QueryShaderCaps
@@ -321,6 +328,7 @@ EXPORTS
     gcoSURF_ConstructWithUserPool
     gcoSURF_CPUCacheOperation
     gcoSURF_Destroy
+    gcoSURF_DestroyForAllHWType
     gcoSURF_Fill
     gcoSURF_Flush
     gcoSURF_GetAlignedSize
@@ -584,6 +592,7 @@ EXPORTS
     gcoTEXTURE_ConstructSized
     gcoTEXTURE_Destroy
     gcoTEXTURE_Disable
+    gcoTEXTURE_Clear
     gcoTEXTURE_Flush
     gcoTEXTURE_FlushVS
     gcoTEXTURE_GetClosestFormat
@@ -696,14 +705,18 @@ EXPORTS
     gcoCLHardware_Construct
 
     ; gcoPROFILER
+	gcoPROFILER_getVersion;
+	gcoPROFILER_getVPGConst
     gcoPROFILER_Construct
     gcoPROFILER_Destroy
     gcoPROFILER_Initialize
+    gcoPROFILER_Enable
     gcoPROFILER_Disable
     gcoPROFILER_EnableCounters
     gcoPROFILER_End
     gcoPROFILER_Write
     gcoPROFILER_Flush
+	gcoPROFILER_WriteChipInfo
 
     ; gcoMATH
     gcoMATH_Log2in5dot5
@@ -729,7 +742,6 @@ EXPORTS
     gcoHAL_QuerySRAM
 
 
-
 !IF "$(VIVANTE_ENABLE_3D)" == "1"
     gcoBUFOBJ_Construct
     gcoBUFOBJ_Destroy
@@ -748,6 +760,7 @@ EXPORTS
     gcoBUFOBJ_WaitFence
     gcoBUFOBJ_IsFenceEnabled
     gcoBUFOBJ_SetDirty
+    gcoBUFOBJ_IsDirty
     gcoBUFOBJ_AlignIndexBufferWhenNeeded
     gcoBUFOBJ_FastLock
     gcoBUFOBJ_Dump
@@ -766,13 +779,15 @@ EXPORTS
     gcoVX_Construct
     gcoVX_Destroy
     gcoVX_BindImage
+	gcoVX_GetImageDescriptor
     gcoVX_SetImageInfo
     gcoVX_BindKernel
     gcoVX_BindUniform
-	gcoVX_GetUniformBase
+    gcoVX_GetUniformBase
     gcoVX_InvokeKernel
     gcoVX_Commit
     gcoVX_AllocateMemory
+    gcoVX_AllocateCacheableMemory
     gcoVX_FreeMemory
     gcoVX_KernelConstruct
     gcoVX_LockKernel
@@ -797,6 +812,11 @@ EXPORTS
     gcoVX_SetRemapAddress
     gcoVX_ProgrammYUV2RGBScale
     gcoVX_CaptureState
+    gcoVX_GetCaptureBufferInfo
+    gcoVX_StartCAPBUF
+    gcoVX_EndCAPBUF
+    gcoVX_QueryCAPBUFMetaData
+    gcoVX_FreeCAPBUFMetaQueryBuffer
     gcoVX_CreateHW
     gcoVX_DestroyHW
     gcoVX_VerifyHardware
@@ -807,15 +827,16 @@ EXPORTS
     gcoVX_SetHardwareType
     gcoVX_MultiGPUSync
     gcoVX_QueryNNClusters
+    gcoVX_QueryNNRingCount
 
-	DWLSetupApbFilter
-	DWLReadAxiFeHwCfg
-	DWLConfigAxiFe
-	DWLConfigAxiFeChns
-	DWLEnableAxiFe
-	DWLReadAxiFeStat
-	DWLDisableAxiFe
-	DWLResetAxiFe
+    DWLSetupApbFilter
+    DWLReadAxiFeHwCfg
+    DWLConfigAxiFe
+    DWLConfigAxiFeChns
+    DWLEnableAxiFe
+    DWLReadAxiFeStat
+    DWLDisableAxiFe
+    DWLResetAxiFe
 
 !IF "$(VSIMULATOR_DEBUG)" == "1"
     gcoOS_UpdateSimulatorCallback

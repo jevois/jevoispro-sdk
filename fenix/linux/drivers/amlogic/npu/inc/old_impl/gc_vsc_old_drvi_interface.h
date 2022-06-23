@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -20,6 +20,7 @@
 #define __gc_vsc_old_drvi_interface_h_
 
 #define _SUPPORT_LONG_ULONG_DATA_TYPE  1
+#define _SUPPORT_DOUBLE_DATA_TYPE      0
 #define _OCL_USE_INTRINSIC_FOR_IMAGE   1
 #define _SUPPORT_NATIVE_IMAGE_READ     1
 
@@ -48,8 +49,8 @@ BEGIN_EXTERN_C()
 #define GC_DEFAULT_TESS_LEVEL           0xFFFF
 
 /* For OES. */
-#define _sldSharedVariableStorageBlockName  "#sh_sharedVar"
-#define _sldWorkGroupIdName                 "#sh_workgroupId"
+#define _sldWorkGroupIndex                  "#sh_workGroupIndex"
+#define _sldModWorkGroupIdName              "#sh_modWorkgroupId"
 #define __INIT_VALUE_FOR_WORK_GROUP_INDEX__ 0x1234
 
 /* For OCL. */
@@ -57,7 +58,6 @@ BEGIN_EXTERN_C()
 #define _sldGlobalSizeName                  "#global_size"
 #define _sldGlobalOffsetName                "#global_offset"
 #define _sldEnqueuedLocalSizeName           "#enqueued_local_size"
-#define _sldLocalStorageAddressName         "#sh_local_address"
 #define _sldWorkGroupCountName              "#workGroupCount"
 #define _sldWorkGroupIdOffsetName           "#workGroupIdOffset"
 #define _sldGlobalIdOffsetName              "#globalIdOffset"
@@ -66,8 +66,12 @@ BEGIN_EXTERN_C()
 /* Shared use. */
 #define _sldLocalInvocationIndexName        "#local_invocation_index"
 #define _sldLocalMemoryAddressName          "#sh_localMemoryAddress"
+#define _sldThreadMemorySBOName             "#sh_threadMemSBO"
+#define _sldThreadMemoryAddressName         "#sh_threadMemAddr"
+#define _sldPrivateMemorySBOName            "#private_address"
 #define _sldThreadIdMemoryAddressName       "#sh_threadIdMemAddr"
 #define _sldWorkThreadCountName             "#sh_workThreadCount"
+#define _sldLocalStorageAddressName         "#sh_local_address"
 
 #define FULL_PROGRAM_BINARY_SIG_1           gcmCC('F', 'U', 'L', 'L')
 #define FULL_PROGRAM_BINARY_SIG_2           gcmCC('P', 'R', 'G', 'M')
@@ -122,6 +126,7 @@ enum gceRecompileKind
     gceRK_PATCH_Y_FLIPPED_SHADER,
     gceRK_PATCH_INVERT_FRONT_FACING,
     gceRK_PATCH_ALPHA_TEST,
+    gceRK_PATCH_POINT_SIZE,
     gceRK_PATCH_SAMPLE_MASK,
     gceRK_PATCH_SIGNEXTENT,
     gceRK_PATCH_TCS_INPUT_COUNT_MISMATCH,
@@ -375,6 +380,12 @@ typedef struct _gcsPatchAlphaTestShader
 }
 gcsPatchAlphaTestShader;
 
+typedef struct _gcsPatchPointSizeShader
+{
+    gcUNIFORM pointSize; /* uniform contains refValue and func. */
+}
+gcsPatchPointSizeShader;
+
 typedef struct _gcsPatchFlippedSamplePosition
 {
     gctFLOAT  value;  /* change gl_SamplePosition to (value - gl_SamplePosition); */
@@ -459,6 +470,7 @@ typedef struct _gcRecompileDirective
         gcsPatchRemoveAssignmentForAlphaChannel * removeOutputAlpha;
         gcsPatchYFlippedShader *  yFlippedShader;
         gcsPatchAlphaTestShader * alphaTestShader;
+        gcsPatchPointSizeShader * addPointSize;
         gcsPatchSampleMask *      sampleMask;
         gcsPatchSignExtent *      signExtent;
         gcsPatchTCSInputCountMismatch *  inputMismatch;
@@ -654,6 +666,14 @@ typedef struct _gcWORK_GROUP_SIZE
     gctUINT       y;
     gctUINT       z;
 }gcWORK_GROUP_SIZE;
+
+/* The same definition of VIR_LocalIdWKind. */
+typedef enum _gceLOCAL_ID_W_KIND
+{
+    gcvLOCAL_ID_W_DISABLE               = 0x0000,
+    gcvLOCAL_ID_W_LOCAL_STORAGE_BASE    = 0x0001,
+    gcvLOCAL_ID_W_RUNNING_WORK_GROUP_ID = 0x0002,
+} gceLOCAL_ID_W_KIND;
 
 typedef struct _gcsHINT
 {
@@ -855,6 +875,14 @@ typedef struct _gcsHINT
     /* Concurrent workGroupCount. */
     gctUINT16   workGroupCount;
 
+    gceLOCAL_ID_W_KIND localIdWKind;
+
+    /* Use 40-bit memory address. */
+    gctBOOL     bUse40BitMemAddr;
+
+    /* Whether use user defined Mem. */
+    gctBOOL     bUseUserDefMem;
+
     /* Sampler Base offset. */
     gctBOOL     useGPRSpill[gcvPROGRAM_STAGE_LAST];
 
@@ -862,7 +890,7 @@ typedef struct _gcsHINT
     gctINT32    GSmaxThreadsPerHwTG;
     gctUINT     tpgTopology;
     /* padding bytes to make the offset of shaderVidNodes field be consistent in 32bit and 64bit platforms */
-    gctCHAR     reservedByteForShaderVidNodeOffset[8];
+    gctCHAR     reservedByteForShaderVidNodeOffset[4];
 
     /* shaderVidNodes should always be the LAST filed in hits. */
     /* SURF Node for memory that is used in shader. */
@@ -873,8 +901,10 @@ typedef struct _gcsHINT
 }gcsHINT;
 
 #if defined(_WINDOWS)
+#if !DX_SHADER
 char _check_shader_vid_nodes_offset[(gcmOFFSETOF(_gcsHINT, shaderVidNodes) % 8) == 0];
 char _check_hint_size[(sizeof(struct _gcsHINT) % 8) == 0];
+#endif
 #endif
 
 #define gcsHINT_isCLShader(Hint)            ((Hint)->clShader)
@@ -903,6 +933,7 @@ typedef enum _gcSHADER_TYPE_KIND
     gceTK_SHORT,
     gceTK_USHORT,
     gceTK_FLOAT16,
+    gceTK_FLOAT64,
     gceTK_OTHER
 } gcSHADER_TYPE_KIND;
 
@@ -1085,9 +1116,21 @@ typedef enum _gceSHADER_FLAGS
 }
 gceSHADER_FLAGS;
 
+typedef enum _gceSHADER_EXT_FLAGS
+{
+    gcvSHADER_EXTFLAG_NONE                              = 0x00000000,
+    gcvSHADER_EXTFLAG_ALWAYS_EMIT_OUTPUT                = 0x00000001,
+    gcvSHADER_EXTFLAG_USE_40BIT_MEM_ADDR                = 0x00000002,
+    gcvSHADER_EXTFLAG_USE_USE_ONE_COMP_MEM_OFFSET       = 0x00000004,
+    gcvSHADER_EXTFLAG_MSAA_DISABLED                     = 0x00000008,
+    /* Apply the SW WAR for the mul/mad/add nan issue. */
+    gcvSHADER_EXTFLAG_APPLY_MUL_ADD_NAN_WAR             = 0x00000010,
+} gceSHADER_EXT_FLAGS;
+
 typedef struct _gceSHADER_SUB_FLAGS
 {
-    gctUINT     dual16PrecisionRule;
+    gctUINT                                 dual16PrecisionRule;
+    gceSHADER_EXT_FLAGS                     extFlags;
 }
 gceSHADER_SUB_FLAGS;
 
@@ -1231,6 +1274,9 @@ typedef enum _Dual16_PrecisionRule
     thus require output to be highp */
     Dual16_PrecisionRule_OUTPUT_HP              = 1 << 5,
 
+    /* enable hp MAD for dual16*/
+    Dual16_PrecisionRule_MAD_HP                 = 1 << 6,
+
     /*  default rules */
     Dual16_PrecisionRule_DEFAULT                = Dual16_PrecisionRule_TEXLD_COORD_HP |
                                                   Dual16_PrecisionRule_RCP_HP         |
@@ -1329,7 +1375,7 @@ typedef struct _gcOPTIMIZER_OPTION
     gctBOOL     dumpPPedStr2File;      /* dump FE preprocessed string to file */
     gctBOOL     dumpUniform;           /* dump uniform value when setting uniform */
     gctBOOL     dumpSpirvIR;           /* dump VIR shader convert from SPIRV */
-    gctBOOL     dumpSpirvToFile;       /* dump SPRIV to file */
+    gctBOOL     dumpSpirvToFile;       /* dump SPIRV to file */
     gctBOOL     dumpBinToFile;         /* dump program binary to file when calling gcLoadProgram */
     gctBOOL     dumpHashPerf;          /* dump hash table performance */
     gctINT      _dumpStart;            /* shader id start to dump */
@@ -1607,6 +1653,22 @@ typedef struct _gcOPTIMIZER_OPTION
     gctBOOL     oclPackedBasicType;
 
     /*
+     * Handle OCL half type as packed
+     *
+     *   VC_OPTION=-OCLPACKEDHALFTYPE:0|1
+     *
+     */
+    gctBOOL     oclPackedHalfType;
+
+    /*
+     * Handle OCL short type as packed
+     *
+     *   VC_OPTION=-OCLPACKEDSHORTTYPE:0|1
+     *
+     */
+    gctBOOL     oclPackedShortType;
+
+    /*
      * Handle OCL  relaxing local address space in OCV
      *
      *   VC_OPTION=-OCLOCVLOCALADDRESSSPACE:0|1
@@ -1731,6 +1793,12 @@ typedef struct _gcOPTIMIZER_OPTION
     /* Close all optimization fro OCL debugger */
     gctBOOL     disableOptForDebugger;
 
+    /* use intrinsic instruction for OCL built-in functions */
+    gctBOOL     useIntrinsicInstForOclBuiltinFunc;
+
+    /* Since we don't want to change the interface to add a extra flag, we add here. */
+    gceSHADER_EXT_FLAGS     extFlags;
+
     /* NOTE: when you add a new option, you MUST initialize it with default
        value in theOptimizerOption too */
 } gcOPTIMIZER_OPTION;
@@ -1740,11 +1808,13 @@ typedef struct _gcOPTIMIZER_OPTION
    DUAL16_AUTO_ALL:   turn on dual16 for all
    DUAL16_FORCE_ON:   we have heuristic to turn off dual16 if the single-t instructions are too many,
                       this option will ignore the heuristic
+   DUAL16_FORCE_HP_TO_MP: force dual16 on and change all the hp to mp to generate more dual-t instructions
 */
 #define DUAL16_FORCE_OFF            0
 #define DUAL16_AUTO_BENCH           1
 #define DUAL16_AUTO_ALL             2
 #define DUAL16_FORCE_ON             3
+#define DUAL16_FORCE_HP_TO_MP       4
 
 #define VC_OPTION_OCLFPCAPS_FASTRELAXEDMATH     (1 << 0 )
 #define VC_OPTION_OCLFPCAPS_FINITEMATHONLY      (1 << 1 )
@@ -1815,15 +1885,23 @@ extern gcOPTIMIZER_OPTION theOptimizerOption;
 #define gcmOPT_DisableOPTforDebugger()     (gcmGetOptimizerOption()->disableOptForDebugger)
 #define gcmOPT_SetDisableOPTforDebugger(b) (gcmGetOptimizerOption()->disableOptForDebugger = b)
 
+#define gcmOPT_UseIntrinsicInstForOclBuiltinFunc()     (gcmGetOptimizerOption()->useIntrinsicInstForOclBuiltinFunc)
+#define gcmOPT_SetUseIntrinsicInstForOclBuiltinFunc(b) (gcmGetOptimizerOption()->useIntrinsicInstForOclBuiltinFunc = b)
+
 #define gcmOPT_TESSLEVEL()          (gcmGetOptimizerOption()->testTessLevel)
 
 #define gcmOPT_DualFP16PrecisionRule()          (gcmGetOptimizerOption()->dual16PrecisionRule)
 #define gcmOPT_DualFP16PrecisionRuleFromEnv()   (gcmGetOptimizerOption()->dual16PrecisionRuleFromEnv)
 
+#define gcmOPT_GetExtFlags()        (gcmGetOptimizerOption()->extFlags)
+#define gcmOPT_SetExtFlags(b)       (gcmGetOptimizerOption()->extFlags = b)
+
 #define gcmOPT_ForceInline()        (gcmGetOptimizerOption()->forceInline)
 #define gcmOPT_UploadUBO()          (gcmGetOptimizerOption()->uploadUBO)
 #define gcmOPT_oclFpCaps()          (gcmGetOptimizerOption()->oclFpCaps)
 #define gcmOPT_oclPackedBasicType() (gcmGetOptimizerOption()->oclPackedBasicType)
+#define gcmOPT_oclPackedHalfType()  (gcmGetOptimizerOption()->oclPackedHalfType)
+#define gcmOPT_oclPackedShortType() (gcmGetOptimizerOption()->oclPackedShortType)
 #define gcmOPT_oclOcvLocalAddressSpace() (gcmGetOptimizerOption()->oclOcvLocalAddressSpace)
 #define gcmOPT_oclOpenCV()          (gcmGetOptimizerOption()->oclOpenCV)
 #define gcmOPT_oclHasLong()         (gcmGetOptimizerOption()->oclHasLong)
@@ -1864,29 +1942,29 @@ extern gctBOOL gcDoTriageForShaderId(gctINT shaderId, gctINT startId, gctINT end
 
 /* Setters */
 /* feature bits */
-#define FB_LIVERANGE_FIX1                   0x0001
-#define FB_INLINE_RENAMETEMP                0x0002
-#define FB_UNLIMITED_INSTRUCTION            0x0004
-#define FB_DISABLE_PATCH_CODE               0x0008
-#define FB_DISABLE_MERGE_CONST              0x0010
-#define FB_DISABLE_OLD_DCE                  0x0020
-#define FB_INSERT_MOV_INPUT                 0x0040  /* insert MOV Rn, Rn for input to help HW team to debug */
-#define FB_ENABLE_FS_OUT_INIT               0x0080  /* enable Fragment shader output
-                                                       initialization if it is un-initialized */
-#define FB_ENABLE_CONST_BORDER              0x0100  /* enable const border value, driver need to set #constBorderValue uniform */
-#define FB_FORCE_LS_ACCESS                  0x8000  /* triage use: enforce all load/store as local storage access,
-                                                       remove this feature bit once local storage access is supported */
-#define FB_FORCE_USC_UNALLOC                0x10000 /* triage use: enforce all load/store as USC Unalloc  */
-
-#define FB_TREAT_CONST_ARRAY_AS_UNIFORM     0x20000 /* Treat a const array as a uniform,
-                                                       it can decrease the temp registers but increases the constant registers. */
-#define FB_DISABLE_GL_LOOP_UNROLLING        0x40000 /* Disable loop unrolling for GL FE. */
-
-#define FB_GENERATED_OFFLINE_COMPILER       0x80000 /* Enable Offline Compile . */
-
-#define FB_VSIMULATOR_RUNNING_MODE          0x100000 /* VSimulator running mode. */
-
-#define FB_VIV_VX_KERNEL                    0x200000        /* A OVX kernel, we need to replace this by using gceAPI. */
+#define FB_LIVERANGE_FIX1                               0x0001
+#define FB_INLINE_RENAMETEMP                            0x0002
+#define FB_UNLIMITED_INSTRUCTION                        0x0004
+#define FB_DISABLE_PATCH_CODE                           0x0008
+#define FB_DISABLE_MERGE_CONST                          0x0010
+#define FB_DISABLE_OLD_DCE                              0x0020
+#define FB_INSERT_MOV_INPUT                             0x0040  /* insert MOV Rn, Rn for input to help HW team to debug */
+#define FB_ENABLE_FS_OUT_INIT                           0x0080  /* enable Fragment shader output
+                                                                   initialization if it is un-initialized */
+#define FB_ENABLE_CONST_BORDER                          0x0100  /* enable const border value, driver need to set #constBorderValue uniform */
+#define FB_FORCE_LS_ACCESS                              0x8000  /* triage use: enforce all load/store as local storage access,
+                                                                   remove this feature bit once local storage access is supported */
+#define FB_FORCE_USC_UNALLOC                            0x10000 /* triage use: enforce all load/store as USC Unalloc  */
+#define FB_TREAT_CONST_ARRAY_AS_UNIFORM                 0x20000 /* Treat a const array as a uniform,
+                                                                   it can decrease the temp registers but increases the constant registers. */
+#define FB_DISABLE_GL_LOOP_UNROLLING                    0x40000 /* Disable loop unrolling for GL FE. */
+#define FB_GENERATED_OFFLINE_COMPILER                   0x80000 /* Enable Offline Compile . */
+#define FB_VSIMULATOR_RUNNING_MODE                      0x100000 /* VSimulator running mode. */
+#define FB_VIV_VX_KERNEL                                0x200000 /* A OVX kernel, we need to replace this by using gceAPI. */
+#define FB_TREAT_SAMPLER_BUFFER_AS_IMAGE                0x400000
+#define FB_EXE_ONE_ATOMIC_WITHIN_SHADER                 0x800000 /* Makes only one thread active executing an ATOMIC instruction in a certain shader group. */
+#define FB_FORCE_APPLY_EXE_ONE_ATOMIC_WITHIN_SHADER     0x1000000
+#define FB_ENABLE_CS_FOR_430                            0x2000000 /* Enable compute shader for openGL 430 version*/
 
 #define gcmOPT_SetPatchTexld(m,n) (gcmGetOptimizerOption()->patchEveryTEXLDs = (m),\
                                    gcmGetOptimizerOption()->patchDummyTEXLDs = (n))
@@ -1949,6 +2027,10 @@ gcePROVOKING_VERTEX_CONVENSION;
                                                 "GL_EXT_tessellation_point_size "\
                                                 "GL_OES_sample_variables "\
                                                 "GL_OES_shader_multisample_interpolation"
+
+#define __DEFAULT_ENABLED_EXTENSION_STRING__    "GL_ARB_explicit_attrib_location"\
+                                                "GL_ARB_uniform_buffer_object"\
+                                                "GL_ARB_compatibility"
 
 typedef struct _gcsGLSLCaps
 {
@@ -2092,6 +2174,7 @@ typedef struct _gcsGLSLCaps
 
     /* GLSL extension string. */
     gctSTRING extensions;
+    gctSTRING defaultEnabledExtensions;
 } gcsGLSLCaps;
 
 /* PatchID*/
@@ -2104,12 +2187,24 @@ extern gcePATCH_ID *
 #define GetPatchID()                          (gcGetPatchId())
 
 /* HW caps.*/
+typedef enum _gcHW_KIND {
+    gcHW_KIND_GPU       = 0,
+    gcHW_KIND_VIP       = 1,
+    gcHW_KIND_COUNT     = 2,
+} gcHW_KIND;
+
 typedef struct _VSC_HW_CONFIG gcsHWCaps;
-extern gcsHWCaps gcHWCaps;
+
 extern gcsHWCaps *
     gcGetHWCaps(
     void
     );
+
+void
+gcSetHWCaps(
+  gcsHWCaps* hwCaps,
+  gcHW_KIND currentHwKind
+);
 
 /* Get HW features. */
 #define GetHWHasHalti0()                      (gcGetHWCaps()->hwFeatureFlags.hasHalti0)
@@ -2117,14 +2212,20 @@ extern gcsHWCaps *
 #define GetHWHasHalti2()                      (gcGetHWCaps()->hwFeatureFlags.hasHalti2)
 #define GetHWHasHalti5()                      (gcGetHWCaps()->hwFeatureFlags.hasHalti5)
 #define GetHWHasAdvancedInst()                (gcGetHWCaps()->hwFeatureFlags.supportAdvancedInsts)
-#define GetHWHasFmaSupport()                  (GetHWHasHalti5() && GetHWHasAdvancedInst())
-#define GetHWHasLoadStoreConv4RoundingMode()  gcvFALSE
-#define GetHWHasFullPackedModeSupport()       gcvFALSE
+#define GetHWHasOldFmaSupport()               (GetHWHasHalti5() && GetHWHasAdvancedInst())
+#define GetHWHasNewFmaSupport()               (gcGetHWCaps()->hwFeatureFlags.supportFP32FMA)
+#define GetHWHasFmaSupport()                  (GetHWHasNewFmaSupport() || GetHWHasOldFmaSupport())
+#define GetHWHasLoadStoreConv4RoundingMode()  (gcGetHWCaps()->hwFeatureFlags.ldstConv4RoundingMode)
+#define GetHWHasFullPackedModeSupport()       (gcGetHWCaps()->hwFeatureFlags.fullPackModeSupport)
 #define GetHWHasTS()                          (gcGetHWCaps()->hwFeatureFlags.supportTS)
 #define GetHWHasGS()                          (gcGetHWCaps()->hwFeatureFlags.supportGS)
 #define GetHWHasSamplerBaseOffset()           (gcGetHWCaps()->hwFeatureFlags.hasSamplerBaseOffset)
+#define GetHWHasUniversalTexldV1()            (gcGetHWCaps()->hwFeatureFlags.hasUniversalTexld)
 #define GetHWHasUniversalTexldV2()            (gcGetHWCaps()->hwFeatureFlags.hasUniversalTexldV2)
 #define GetHWHasTexldUFix()                   (gcGetHWCaps()->hwFeatureFlags.hasTexldUFix)
+#define GetHWSupportTexldUV1()                (GetHWHasUniversalTexldV1())
+#define GetHWSupportTexldUV2()                (GetHWHasUniversalTexldV2() && GetHWHasTexldUFix())
+#define GetHWSupportTexldU()                  (GetHWSupportTexldUV1() || GetHWSupportTexldUV2())
 #define GetHWHasImageOutBoundaryFix()         (gcGetHWCaps()->hwFeatureFlags.hasImageOutBoundaryFix)
 
 /* Get HW caps. */
@@ -2258,6 +2359,7 @@ extern gceSTATUS gcInitGLSLCaps(
 
 /* GLSL extension string. */
 #define GetGLExtensionString()                (gcGetGLSLCaps()->extensions)
+#define GetGLDefaultEnabledExtensionString()  (gcGetGLSLCaps()->defaultEnabledExtensions)
 
 void
 gcGetOptionFromEnv(
@@ -2491,6 +2593,21 @@ gcSHADER_GetShaderID(
     );
 
 /*******************************************************************************
+**  gcSHADER_GetShaderVersion
+**
+**  Get the gc shader version.
+**
+**  OUTPUT:
+**
+**      gctUINT32 * shaderVersion
+**          The shader version of gcshader.
+*/
+gceSTATUS
+gcSHADER_GetShaderVersion(
+    OUT gctUINT32 * shaderVersion
+    );
+
+/*******************************************************************************
 **  gcSHADER_SetDisableEZ
 **
 **  Set disable EZ for this shader.
@@ -2625,6 +2742,31 @@ gceSTATUS
 gcSHADER_Copy(
     IN gcSHADER Shader,
     IN gcSHADER Source
+    );
+
+/*******************************************************************************
+**  gcSHADER_SaveHeader
+**
+**  Save a gcSHADER object to a binary buffer.
+**
+**  INPUT:
+**
+**      gcSHADER Shader
+**          Pointer to a gcSHADER object.
+**
+**      gctUINT32 Size
+**          The shader size of binary excluding header.
+**
+**  OUTPUT:
+**      gctUINT8** Buffer
+**          Pointer to a binary buffer to be used as storage for the gcSHADER.
+**
+*/
+gceSTATUS
+gcSHADER_SaveHeader(
+    IN gcSHADER        Shader,
+    IN gctUINT32       Size,
+    IN OUT gctUINT8**  Buffer
     );
 
 /*******************************************************************************
@@ -2964,6 +3106,31 @@ gcSHADER_GetBuiltinNameKind(
     IN gcSHADER              Shader,
     IN gctCONST_STRING       Name,
     OUT gctUINT32 *          Kind
+    );
+
+/*******************************************************************************
+**  gcSHADER_GetBuiltinNameUniformKind
+**
+**  Get the uniform kind based on the builtin name string.
+**
+**  INPUT:
+**
+**      gcSHADER Shader
+**          Pointer to a gcSHADER object.
+**
+**      gctCONST_STRING Name
+**          String of the name.
+**
+**  OUTPUT:
+**
+**      gceUNIFORM_FLAGS * UniformKind
+**          Pointer to a UniformKind.
+*/
+gceSTATUS
+gcSHADER_GetBuiltinNameUniformKind(
+    IN gcSHADER              Shader,
+    IN gctCONST_STRING       Name,
+    OUT gceUNIFORM_FLAGS *   UniformKind
     );
 
 /*******************************************************************************
@@ -5411,6 +5578,29 @@ gcSHADER_UpdateTargetPacked(
     IN gctINT Components
     );
 
+/*****************************************************************************************************
+**  gcSHADER_UpdateTargetRegMemorySameFormat
+**
+**  Update instruction target's regMemorySameFormat field to indicate target and memory data of same format
+**
+**  INPUT:
+**
+**      gcSHADER Shader
+**          Pointer to a gcSHADER object.
+**
+**      gctUINT8  RegMemorySameFormat
+**          Flag to indicate if reg and memory reference is of same format
+**
+**  OUTPUT:
+**
+**      Nothing.
+*/
+gceSTATUS
+gcSHADER_UpdateTargetRegMemorySameFormat(
+    IN gcSHADER Shader,
+    IN gctUINT8 RegMemorySameFormat
+    );
+
 /*******************************************************************************
 **  gcSHADER_UpdateSourcePacked
 **
@@ -7421,7 +7611,8 @@ gcKERNEL_FUNCTION_AddArgument(
     IN gctUINT16 VariableIndex,
     IN gctUINT32 TempIndex,
     IN gctUINT8 Enable,
-    IN gctUINT8 Qualifier
+    IN gctUINT8 Qualifier,
+    IN gctUINT16 TypeQualifier
     );
 
 gceSTATUS
@@ -8006,6 +8197,11 @@ gcCreateFrontFacingDirective(
 
 gceSTATUS
 gcCreateAlphaTestDirective(
+    OUT gcPatchDirective  **   PatchDirectivePtr
+    );
+
+gceSTATUS
+gcCreatePointSizeDirective(
     OUT gcPatchDirective  **   PatchDirectivePtr
     );
 

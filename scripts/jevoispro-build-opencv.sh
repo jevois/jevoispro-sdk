@@ -13,10 +13,15 @@ fi
 
 # OpenCV version to build:
 ma=4
-mi=5
-pa=3
+mi=6
+pa=0
 
-vino="2021.4"
+vino="2022.1" # release
+vinobranch="releases/2022/1" # github branch
+
+# note: for vino 2021.4 use -DINF_ENGINE_RELEASE=${vino//./0}0000 \
+# note: for vino 2021.4.2 use -DINF_ENGINE_RELEASE=${vino//./0}00 \
+infrel=${vino//./0}0000
 
 # Our deb package release number:
 pkgrel=1
@@ -36,6 +41,9 @@ if [ "X$cross" = "X1" ]; then
     arch="aarch64"
     root="/home/${USER}/jevois/software/jevoispro-sdk/jevoispro-sysroot"
 fi
+
+# NOTE: 4.6.0 disable OpenCL on host build as it leads to an undefined symbol in python??
+if [ $arch = "amd64" ]; then JVOPENCL=OFF; else JVOPENCL=ON; fi
 
 if [ "x$1" = "x-y" ]; then usedef=1; else usedef=0; fi
 function question { if [ $usedef -eq 1 ]; then REPLY="y"; else read -p "${1}? [Y/n] "; fi }
@@ -68,8 +76,15 @@ packages=( build-essential python2.7-dev gcc-${gccver} g++-${gccver} gfortran-${
            libtesseract-dev tesseract-ocr-all libleptonica-dev liblapacke-dev libopenblas-dev libopenblas-openmp-dev
            libavresample-dev pylint libopenjp2-7-dev libopenjpip7 libopenjp3d7 libopenjp2-tools libopenjp3d-tools
            libcaffe-cpu-dev curl wget libssl-dev ca-certificates git pkg-config automake libtool shellcheck python
-           libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev )
+           libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev 
+           # for openvino:
+           clang-format libssl-dev ca-certificates git-lfs libboost-regex-dev libgtk2.0-dev pkg-config
+           unzip automake libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev libglib2.0-dev libgtk2.0-dev
+           libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev scons )
+
 # libopenjpip-dec-server libopenjpip-server libopenjpip-viewer
+
+# openvino uses gcc-multilib g++-multilib but this removes arm g++-10
 
 ####################################################################################################
 question "Install/update packages"
@@ -136,21 +151,29 @@ question "Compile and install OpenVino"
 if [ "X$REPLY" != "Xn" ]; then
 
     sudo rm -rf openvino-${vino} openvino
+    sudo rm -rf openvino_contrib-${vino} openvino_contrib
     sudo rm -rf /usr/local/share/ade
     sudo rm -rf ${root}/usr/share/jevoispro-openvino-${vino}
-    vinobranch=${vino/.//}
-    git clone --recursive --recurse-submodules --branch releases/${vinobranch} https://github.com/openvinotoolkit/openvino.git
+
+    # Get openvino_contrib:
+    git clone --recursive --recurse-submodules --branch ${vinobranch} https://github.com/openvinotoolkit/openvino_contrib.git
+    mv openvino_contrib openvino_contrib-${vino}
+    
+    # Get openvino:
+    git clone --recursive --recurse-submodules --branch ${vinobranch} https://github.com/openvinotoolkit/openvino.git
     mv openvino openvino-${vino}
+
     cd openvino-${vino}
 
-    # need to apply a few patches:
-    sed --in-place=.bak "s/#pragma once/#pragma once\n#pragma GCC diagnostic ignored \"-Warray-bounds\"/" inference-engine/thirdparty/mkl-dnn/src/cpu/x64/xbyak/xbyak.h
+    # Install dependencies
+    ./install_build_dependencies.sh -y
     
-
     # Ok, build it:
     mkdir build && cd build
-    
+
     cmake -DCMAKE_BUILD_TYPE=Release -DNGRAPH_ONNX_IMPORT_ENABLE=ON \
+          -DIE_EXTRA_MODULES=../openvino_contrib-${vino}/modules -DBUILD_java_api=OFF \
+          -DENABLE_OPENCV=ON \
           -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
           -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
           -DCPACK_SET_DESTDIR=ON \
@@ -158,15 +181,8 @@ if [ "X$REPLY" != "Xn" ]; then
     
     make -j ${job}
 
-    # Compiling GNA results in 3 copies which upsets ldconfig:
-    gnalib="${root}/usr/share/jevoispro-openvino-${vino}/deployment_tools/inference_engine/external/gna/lib"
-    badgna1=`/bin/ls ${gnalib}/libgna.so.?`
-    badgna2=`/bin/ls ${gnalib}/libgna.so.?.*`
-    sudo rm ${badgna1}
-    sudo rm ${badgna2}
-    sudo ln -s ${gnalib}/libgna.so ${badgna1}
-    sudo ln -s ${gnalib}/libgna.so ${badgna2}
-    
+    sudo cmake --install . --prefix /usr/share/jevoispro-openvino-${vino}
+
     # Description
     cat > description-pak <<EOF
 OpenVino ${vino} configured for use with JeVois-Pro smart machine vision
@@ -176,10 +192,10 @@ EOF
     cat > postinstall-pak <<EOF
 #!/bin/sh
 f=/etc/ld.so.conf.d/jevoispro-openvino.conf
-echo "/usr/share/jevoispro-openvino-${vino}/deployment_tools/inference_engine/lib/${VINOARCH}" >> \${f}
-echo "/usr/share/jevoispro-openvino-${vino}/deployment_tools/ngraph/lib" >> \${f}
-echo "/usr/share/jevoispro-openvino-${vino}/deployment_tools/inference_engine/external/gna/lib" >> \${f}
-echo "/usr/share/jevoispro-openvino-${vino}/deployment_tools/inference_engine/external/tbb/lib" >> \${f}
+echo "/usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}" >> \${f}
+echo "/usr/share/jevoispro-openvino-${vino}/runtime/3rdparty/tbb/lib" >> \${f}
+
+ldconfig
 EOF
     chmod a+x postinstall-pak
 
@@ -216,9 +232,6 @@ EOF
          --install=no \
          --pkgrelease "${pkgrel}ubuntu${uburel}" \
          --requires "${pkgdeps}"
-    
-    # also install right now so opencv can use it right away:
-    sudo cmake --install . --prefix /usr/share/jevoispro-openvino-${vino}
 
     cd ../..
 
@@ -260,6 +273,8 @@ if [ "X$REPLY" != "Xn" ]; then
     cd opencv-${ver}
     mkdir build
     cd build
+
+    # this messes things up?    
     
     opts="-DCMAKE_BUILD_TYPE=RELEASE \
     -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-opencv-${ver} \
@@ -284,7 +299,7 @@ if [ "X$REPLY" != "Xn" ]; then
     \
     -DWITH_EIGEN=ON \
     -DWITH_OPENMP=ON \
-    -DWITH_OPENCL_SVM=ON \
+    -DWITH_OPENCL_SVM=$JVOPENCL \
     -DWITH_VULKAN=ON \
     -DWITH_OPENVX=ON \
     -DWITH_FFMPEG=ON \
@@ -292,15 +307,21 @@ if [ "X$REPLY" != "Xn" ]; then
     -DWITH_V4L=ON \
     -DWITH_QT=OFF \
     -DWITH_OPENGL=OFF \
-    -DWITH_OPENCL=ON \
+    -DWITH_OPENCL=$JVOPENCL \
     -DWITH_VTK=ON \
     -DWITH_CUDA=OFF \
     \
+    -DWITH_TIMVX=ON \
+    \
+    -DWITH_OPENVINO=ON \
+    -DOPENCV_DNN_OPENVINO=ON \
     -DWITH_INF_ENGINE=ON \
     -DWITH_NGRAPH=ON \
-    -DInferenceEngine_DIR=/usr/share/jevoispro-openvino-${vino}/deployment_tools/inference_engine/share \
-    -Dngraph_DIR=/usr/share/jevoispro-openvino-${vino}/deployment_tools/ngraph/cmake \
-    -DINF_ENGINE_RELEASE=${vino//./0}0000 \
+    -Dngraph_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
+    -DInferenceEngine_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
+    -DINF_ENGINE_RELEASE=${infrel} \
+    -DINF_ENGINE_VERSION=${vino} \
+    -DHAVE_INF_ENGINE=1 \
     -DCMAKE_FIND_ROOT_PATH=/usr/share/jevoispro-openvino-${vino}/ \
     \
     -DBUILD_EXAMPLES=ON \
@@ -364,7 +385,7 @@ EOF
 #!/bin/sh
 f=/etc/ld.so.conf.d/jevoispro-opencv.conf
 echo "/usr/share/jevoispro-opencv-${ver}/lib" > \${f}
-echo "/usr/share/jevoispro-opencv-${ver}/lib/python${pyver}/dist-packages/cv2/python-${pyver}" >> \${f}
+echo "/usr/share/jevoispro-opencv-${ver}/lib/python${pyver}/site-packages/cv2/python-${pyver}" >> \${f}
 
 ldconfig
 # Fix compilation error with libjpeg-turbo8
@@ -404,6 +425,14 @@ EOF
     if [ "X$REPLY" != "Xn" ]; then
         # Install it for the next steps (compiling jevois software)
         sudo make install
+    fi
+
+    question "Update jevois/Contrib/npu with TIM-VX installed here"
+    if [ "X$REPLY" != "Xn" ]; then
+        /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/include/* \
+                ~/jevois/software/jevois/Contrib/npu/include/
+        /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/lib \
+                ~/jevois/software/jevois/Contrib/npu/x86_64_linux/    
     fi
 fi
 

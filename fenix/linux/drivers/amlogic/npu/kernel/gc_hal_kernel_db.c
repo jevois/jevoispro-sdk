@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -576,6 +576,11 @@ gckKERNEL_CreateProcessDB(
                 gcmkFATAL("%s(%d): DB of Process=0x%x cannot be reentered since it was in deletion\n",
                           __FUNCTION__, __LINE__, ProcessID);
                 gcmkONERROR(gcvSTATUS_INVALID_REQUEST);
+            }
+
+            if (database->refs == gcvNULL)
+            {
+                gcmkONERROR(gcvSTATUS_INVALID_ADDRESS);
             }
 
             gcmkVERIFY_OK(gckOS_AtomIncrement(Kernel->os, database->refs, &oldVal));
@@ -1141,6 +1146,12 @@ gckKERNEL_DestroyProcessDB(
     if (database)
     {
         gctINT32 oldVal = 0;
+
+        if (database->refs == gcvNULL)
+        {
+            gcmkONERROR(gcvSTATUS_INVALID_ADDRESS);
+        }
+
         gcmkONERROR(gckOS_AtomDecrement(Kernel->os, database->refs, &oldVal));
         if (oldVal != 1)
         {

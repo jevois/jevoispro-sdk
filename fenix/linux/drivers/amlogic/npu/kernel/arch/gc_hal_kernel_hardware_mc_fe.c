@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -285,13 +285,6 @@ gckMCFE_Construct(
                               &fe->channels[i]));
     }
 
-    /* Enable all events. */
-    gcmkONERROR(
-        gckOS_WriteRegisterEx(Hardware->os,
-                              Hardware->core,
-                              0x00014,
-                              0xFFFFFFFF));
-
     *FE = fe;
     return gcvSTATUS_OK;
 
@@ -413,6 +406,7 @@ gckMCFE_Initialize(
 {
     gctUINT32 i;
     gceSTATUS status;
+    gctUINT32 eventEnable = 0xFFFFFFFF;
 
     gcmkHEADER_ARG("Hardware=%p MMUEnabled=%d FE=%p", Hardware, MMUEnabled, FE);
 
@@ -424,6 +418,13 @@ gckMCFE_Initialize(
             gcmkONERROR(_InitializeChannel(Hardware, MMUEnabled, &FE->channels[i], i));
         }
     }
+
+    /* Enable all events. */
+    gcmkONERROR(
+        gckOS_WriteRegisterEx(Hardware->os,
+                              Hardware->core,
+                              0x00014,
+                              eventEnable));
 
     FE->mmuEnabled = MMUEnabled;
 
@@ -581,7 +582,7 @@ gckMCFE_Event(
 #endif
 
 #if gcdINTERRUPT_STATISTIC
-        if (Event < gcmCOUNTOF(Hardware->kernel->eventObj->queues))
+        if (Event < (gctUINT8)Hardware->kernel->eventObj->totalQueueCount)
         {
             gckOS_AtomSetMask(Hardware->pendingEvent, 1 << Event);
         }
@@ -770,15 +771,22 @@ gckMCFE_Execute(
     gceSTATUS status;
     gctUINT32 regBase;
     gcsMCFE_DESCRIPTOR *desc;
-    gcsMCFE_CHANNEL * channel  = &Hardware->mcFE->channels[ChannelId];
-    gcsMCFE_RING_BUF * ringBuf = Priority ? &channel->priRingBuf
-                              : &channel->stdRingBuf;
+    gckMCFE mcFE = Hardware->mcFE;
+    gcsMCFE_CHANNEL * channel  = gcvNULL;
+    gcsMCFE_RING_BUF * ringBuf = gcvNULL;
 
     gcmkHEADER_ARG("Hardware=0x%x Priority=0x%x ChannelId=%u Address=%x Bytes=%u",
                     Hardware, Priority, ChannelId, Address, Bytes);
 
+    /* ChannelId should be valid. */
+    gcmkASSERT(mcFE && ChannelId < mcFE->channelCount);
+
+    channel = &mcFE->channels[ChannelId];
+
     /* No priority channel in system channel by design. */
     gcmkASSERT(!(channel->binding == gcvMCFE_CHANNEL_SYSTEM && Priority == 1));
+
+    ringBuf = Priority ? &channel->priRingBuf : &channel->stdRingBuf;
 
     /*
      * If no more descriptor space to write in ring buffer.
@@ -872,11 +880,17 @@ gckMCFE_HardwareIdle(
     gctUINT32 readPtr;
     gctUINT32 ChannelId = 0;
     gctBOOL Priority = gcvFALSE;
-    gcsMCFE_CHANNEL * channel  = &Hardware->mcFE->channels[ChannelId];
-    gcsMCFE_RING_BUF * ringBuf = Priority ? &channel->priRingBuf
-                              : &channel->stdRingBuf;
+    gckMCFE mcFE = Hardware->mcFE;
+    gcsMCFE_CHANNEL * channel  = gcvNULL;
+    gcsMCFE_RING_BUF * ringBuf = gcvNULL;
 
     gcmkHEADER();
+
+    /* ChannelId should be valid. */
+    gcmkASSERT(mcFE && ChannelId < mcFE->channelCount);
+
+    channel = &mcFE->channels[ChannelId];
+    ringBuf = Priority ? &channel->priRingBuf : &channel->stdRingBuf;
 
     *isIdle = gcvTRUE;
 

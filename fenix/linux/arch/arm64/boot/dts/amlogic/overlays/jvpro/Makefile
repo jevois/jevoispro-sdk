@@ -5,6 +5,9 @@ dtbo-y += aux-i2c.dtbo \
             emmc.dtbo \
             icm20948.dtbo \
             imx290.dtbo \
+            os08a10.dtbo \
+            ov2312.dtbo \
+            ar0234.dtbo \
             remote.dtbo \
             sdio.dtbo \
             wdt.dtbo \

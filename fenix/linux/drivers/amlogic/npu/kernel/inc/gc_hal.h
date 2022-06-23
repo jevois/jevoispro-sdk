@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2021 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@
 *
 *    The GPL License (GPL)
 *
-*    Copyright (C) 2014 - 2020 Vivante Corporation
+*    Copyright (C) 2014 - 2021 Vivante Corporation
 *
 *    This program is free software; you can redistribute it and/or
 *    modify it under the terms of the GNU General Public License
@@ -807,7 +807,7 @@ gckOS_Delay(
     IN gctUINT32 Delay
     );
 
-/* Delay a number of microseconds. */
+/* Delay a number of milliseconds. */
 gceSTATUS
 gckOS_Udelay(
     IN gckOS Os,
@@ -1145,6 +1145,14 @@ gckOS_GetPolicyID(
     OUT gctUINT32_PTR AXIConfig
     );
 
+#if gcdENABLE_MP_SWITCH
+gceSTATUS
+gckOS_SwitchCoreCount(
+    IN gckOS Os,
+    OUT gctUINT32 *Count
+    );
+#endif
+
 /******************************************************************************\
 ************************** Android Native Fence Sync ***************************
 \******************************************************************************/
@@ -1216,8 +1224,8 @@ gceSTATUS
 gckOS_UserSignal(
     IN gckOS Os,
     IN gctSIGNAL Signal,
-    IN gctINT Recvid,
-    IN gctINT Coid
+    IN gctINT Rcvid,
+    IN const struct sigevent *Event
     );
 #else
 gceSTATUS
@@ -1714,6 +1722,14 @@ gckKERNEL_CloseUserData(
     OUT gctPOINTER * KernelPointer
     );
 
+/* Query kernel by core index */
+gceSTATUS
+gckOS_QueryKernel(
+    IN gckKERNEL Kernel,
+    IN gctINT index,
+    OUT gckKERNEL * KernelOut
+    );
+
 gceSTATUS
 gckDVFS_Construct(
     IN gckHARDWARE Hardware,
@@ -1943,6 +1959,12 @@ gckHARDWARE_SetPowerState(
     );
 
 gceSTATUS
+gckHARDWARE_QueryPowerStateUnlocked(
+    IN gckHARDWARE Hardware,
+    OUT gceCHIPPOWERSTATE* State
+    );
+
+gceSTATUS
 gckHARDWARE_QueryPowerState(
     IN gckHARDWARE Hardware,
     OUT gceCHIPPOWERSTATE* State
@@ -1952,6 +1974,12 @@ gceSTATUS
 gckHARDWARE_EnablePowerManagement(
     IN gckHARDWARE Hardware,
     IN gctBOOL Enable
+    );
+
+gceSTATUS
+gckHARDWARE_QueryPowerManagement(
+    IN gckHARDWARE Hardware,
+    OUT gctBOOL *Enable
     );
 
 gceSTATUS
@@ -2157,7 +2185,10 @@ gceSTATUS
 gckMMU_FillFlatMapping(
     IN gckMMU Mmu,
     IN gctUINT64 PhysBase,
-    IN gctSIZE_T Size
+    IN gctSIZE_T Size,
+    IN gctBOOL   Reserved,
+    IN gctBOOL   AbleToShift,
+    OUT gctUINT32 *GpuBaseAddress
     );
 
 gceSTATUS
@@ -2180,15 +2211,13 @@ gceSTATUS
 gckHARDWARE_QueryContextProfile(
     IN gckHARDWARE Hardware,
     IN gctBOOL Reset,
-    IN gckCONTEXT Context,
     OUT gcsPROFILER_COUNTERS_PART1 * Counters_part1,
     OUT gcsPROFILER_COUNTERS_PART2 * Counters_part2
     );
 
 gceSTATUS
 gckHARDWARE_UpdateContextProfile(
-    IN gckHARDWARE Hardware,
-    IN gckCONTEXT Context
+    IN gckHARDWARE Hardware
     );
 
 gceSTATUS

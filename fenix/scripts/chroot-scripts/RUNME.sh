@@ -68,7 +68,18 @@ tar jxf rtl8812au-jevois.tbz
 
 systemctl disable hostapd
 
+# tim-vx and galcore NPU driver (see https://github.com/opencv/opencv/wiki/TIM-VX-Backend-For-Running-OpenCV-On-NPU):
+#mkdir /opt
+#cd /opt
+#wget https://github.com/VeriSilicon/TIM-VX/releases/download/v1.1.34.fix/aarch64_A311D_6.4.8.tgz
+#tar xvf aarch64_A311D_6.4.8.tgz
+#echo "export VIVANTE_SDK_DIR=/opt/aarch64_A311D_6.4.8" >> /root/.bashrc
+#/bin/cp /opt/aarch64_A311D_6.4.8/lib/galcore.ko /usr/lib/modules/4.9.241/kernel/drivers/amlogic/npu/galcore.ko
+#/bin/cp -a /opt/aarch64_A311D_6.4.8/lib/* /usr/lib/
+#/bin/rm /usr/lib/galcore.ko
+
 # this does not work (wrong kernel detected), will have to run manually on platform:
+cd /
 cat <<-EOF > jevoispro-fixup.sh
 #!/bin/bash
 cd /usr/src/linux-headers-4.9.*/arch
@@ -89,6 +100,7 @@ chmod a+x jevoispro-fixup.sh
 
 # Clean up
 apt-get update
+apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
 apt-get -y clean
 apt-get -y autoclean
 #history -c

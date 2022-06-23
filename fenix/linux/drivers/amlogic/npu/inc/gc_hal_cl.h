@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -69,6 +69,7 @@ typedef struct _gcoCL_DEVICE_INFO
     gctUINT64           queueProperties;        /* cl_command_queue_properties */
     gctBOOL             hostUnifiedMemory;
     gctBOOL             errorCorrectionSupport;
+    gctUINT64           halfFpConfig;           /* cl_device_fp_config */
     gctUINT64           singleFpConfig;         /* cl_device_fp_config */
     gctUINT64           doubleFpConfig;         /* cl_device_fp_config */
     gctUINT             profilingTimingRes;
@@ -93,11 +94,12 @@ typedef struct _gcoCL_DEVICE_INFO
 
     /* cluster info */
     gctBOOL             clusterSupport;
-    gctUINT32           clusterCount;
-    gctUINT32           clusterAliveMask;
-    gctUINT32           clusterAliveCount;
-    gctUINT32           clusterMinID;
-    gctUINT32           clusterMaxID;
+    gctUINT32           clusterCount;  /* cluster count per core */
+    gctUINT32           clusterAliveMask[gcdMAX_MAJOR_CORE_COUNT];
+    gctUINT32           clusterAliveCount[gcdMAX_MAJOR_CORE_COUNT];
+    gctUINT32           clusterMinID[gcdMAX_MAJOR_CORE_COUNT];
+    gctUINT32           clusterMaxID[gcdMAX_MAJOR_CORE_COUNT];
+    gctUINT32           totalClusterAliveCount;
 
     gceCHIPMODEL        chipModel;
     gctUINT32           chipRevision;
@@ -136,6 +138,19 @@ gceSTATUS
 gcoCL_ForceRestoreHardwareType(
     IN gceHARDWARE_TYPE savedType
     );
+
+/*******************************************************************************
+**
+**  gcoCL_GetCurrentPhysicalAddr
+**
+*/
+gceSTATUS
+gcoCL_GetCurrentPhysicalAddr(
+    IN gcsSURF_NODE_PTR    Node,
+    IN  gceSURF_TYPE       surfType,
+    OUT gctUINT32  *       Address
+    );
+
 /*******************************************************************************
 **
 **  gcoCL_InitializeHardware
@@ -272,6 +287,15 @@ gcoCL_AllocateMemory(
 */
 gceSTATUS
 gcoCL_FreeMemory(
+    IN gctUINT32            Physical,
+    IN gctPOINTER           Logical,
+    IN gctUINT              Bytes,
+    IN gcsSURF_NODE_PTR     Node,
+    IN gceSURF_TYPE         Type
+    );
+
+gceSTATUS
+gcoCL_SyncFreeMemory(
     IN gctUINT32            Physical,
     IN gctPOINTER           Logical,
     IN gctUINT              Bytes,
@@ -650,7 +674,8 @@ gcoCL_CreateHWWithType(
 
 gceSTATUS
 gcoCL_DestroyHW(
-    gcoHARDWARE  Hardware
+    gcoHARDWARE  Hardware,
+    gctBOOL Stall
     );
 
 gceSTATUS
@@ -842,6 +867,11 @@ gcoCL_IsFeatureAvailable(
     IN gceFEATURE Feature
     );
 
+gctUINT
+gcoCL_QueryBLTFenceEndianHint(
+    IN gcoHARDWARE Hardware
+    );
+
 gceSTATUS
 gcoCL_3dBltLock(
     IN gcoHARDWARE Hardware,
@@ -870,6 +900,35 @@ gcoCL_coreIdToChip(
     gcoHARDWARE Hardware,
     gctUINT coreId);
 
+gceSTATUS
+gcoCL_MultiGPUSync(
+    IN gcoHARDWARE Hardware,
+    IN gctUINT32_PTR * Memory
+    );
+
+gceSTATUS
+gcoCL_MultiGPUFlushCache(
+    IN gcoHARDWARE Hardware,
+    IN gctUINT32_PTR * Memory
+    );
+
+gceSTATUS
+gcoCL_FlushCache(
+    IN gcoHARDWARE Hardware,
+    IN gctUINT32_PTR * Memory
+    );
+
+gceSTATUS
+gcoCL_SetDefaultHardware(
+    IN gcoHARDWARE hw,
+    OUT gcoHARDWARE *savedHW
+    );
+
+gceSTATUS
+gcoCL_SetTimeOut(
+    IN gcoHARDWARE Hardware,
+    IN gctUINT32 timeOut
+    );
 #ifdef __cplusplus
 }
 #endif

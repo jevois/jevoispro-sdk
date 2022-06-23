@@ -48,8 +48,7 @@
 
     // JEVOIS: Camera sensor I2C uses i2c0 on the M.2 camera connector:
 	fragment@4 {
-        //target = <&i2c2>; // FIXME: PROTO only
-        target = <&i2c0>; // FIXME: Production units
+        target = <&i2c0>;
 
 		__overlay__ {
 	        status = "okay";

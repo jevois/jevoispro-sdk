@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (c) 2005 - 2020 by Vivante Corp.  All rights reserved.
+*    Copyright (c) 2005 - 2021 by Vivante Corp.  All rights reserved.
 *
 *    The material in this file is confidential and contains trade secrets
 *    of Vivante Corporation. This is proprietary information owned by
@@ -472,7 +472,7 @@ PROG_GL_XFB_OUT_TABLE;
 typedef struct PROG_VK_IMAGE_FORMAT_INFO
 {
     VSC_IMAGE_FORMAT                            imageFormat;
-    gctBOOL                                     bSetInSpriv;
+    gctBOOL                                     bSetInSpirv;
 }
 PROG_VK_IMAGE_FORMAT_INFO;
 
@@ -493,6 +493,20 @@ typedef struct PROG_VK_IMAGE_DERIVED_INFO
        of pMipLevel array. */
     SHADER_PRIV_CONSTANT_ENTRY*                 pMipLevel;
 
+    /* For an image, it might need an extra image information constant. As each texel buffer in
+       Binding::arraySize array has levelsSamples, so this is the first entry
+       of pExtraImageInfo1 array. */
+    SHADER_PRIV_CONSTANT_ENTRY*                 pExtraImageInfo1;
+
+    /* For an image, it might need an hw image-size attached.*/
+    SHADER_PRIV_CONSTANT_ENTRY*                 pHWImageSize;
+
+    /* Save the image description with the addressing mode NONE.  */
+    SHADER_PRIV_CONSTANT_ENTRY*                 pAddrModeNoneImage;
+
+    /* Save the address of this image.*/
+    SHADER_PRIV_CONSTANT_ENTRY*                 pImageAddr;
+
     /* ImageFormat, can be NONE. */
     PROG_VK_IMAGE_FORMAT_INFO                   imageFormatInfo;
 }
@@ -511,7 +525,7 @@ typedef struct PROG_VK_SAMPLER_DERIVED_INFO
     SHADER_PRIV_CONSTANT_ENTRY*                 pLodMinMax[2];
 
     /* For a sampler, it might need a levelsSamples attached. As each sampler in
-       rraySize array has levelsSamples, so this is the first entry
+       arraySize array has levelsSamples, so this is the first entry
        of levelsSamples array. */
     SHADER_PRIV_CONSTANT_ENTRY*                 pLevelsSamples[2];
 }
@@ -534,6 +548,8 @@ typedef struct PROG_VK_PRIV_COMB_TEX_SAMP_HW_MAPPING
 {
     /* Index based on countOfArray in PROG_VK_PRIV_COMB_TEX_SAMP_HW_MAPPING_POOL. */
     gctUINT                                     pctsHmEntryIndex;
+
+    gctUINT                                     stageIdx;
 
     /* For sub-array-size m of sampler, and sub-array-size n of tex, if
        bSamplerMajor is true, the hw sampler will be organized as
@@ -617,8 +633,11 @@ typedef struct PROG_VK_COMBINED_TEX_SAMPLER_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /*----------------------------------Sampler-related----------------------------------*/
     PROG_VK_SAMPLER_DERIVED_INFO                samplerDerivedInfo[VSC_MAX_SHADER_STAGE_COUNT];
@@ -669,8 +688,11 @@ typedef struct PROG_VK_SEPARATED_SAMPLER_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /* Which kinds of inst operation acting on sampler. The count of this
        resOpBit is same as samplerBinding::arraySize */
@@ -727,8 +749,11 @@ typedef struct PROG_VK_SEPARATED_TEXTURE_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /* Which kinds of inst operation acting on texture. The count of this
        resOpBit is same as texBinding::arraySize */
@@ -802,8 +827,11 @@ typedef struct PROG_VK_UNIFORM_TEXEL_BUFFER_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     PROG_VK_UNIFORM_TEXEL_BUFFER_ENTRY_FLAG     utbEntryFlag;
 
@@ -835,7 +863,7 @@ PROG_VK_UNIFORM_TEXEL_BUFFER_TABLE;
    VSC_SHADER_RESOURCE_TYPE_INPUT_ATTACHMENT
 */
 
-typedef union PROG_VK_INPUT_ATTACHMENT_HW_MAPPING
+typedef struct PROG_VK_INPUT_ATTACHMENT_HW_MAPPING
 {
     SHADER_UAV_SLOT_MAPPING                     uavMapping;
 
@@ -856,8 +884,11 @@ typedef struct PROG_VK_INPUT_ATTACHMENT_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /* Different shader stage may have different HW mappings. */
     PROG_VK_INPUT_ATTACHMENT_HW_MAPPING         hwMappings[VSC_MAX_SHADER_STAGE_COUNT];
@@ -893,8 +924,8 @@ PROG_VK_INPUT_ATTACHMENT_TABLE;
    VSC_SHADER_RESOURCE_TYPE_STORAGE_TEXEL_BUFFER
    VSC_SHADER_RESOURCE_TYPE_STORAGE_BUFFER_DYNAMIC
 */
-
-typedef struct PROG_VK_STORAGE_TABLE_ENTRY
+typedef struct _PROG_VK_STORAGE_TABLE_ENTRY PROG_VK_STORAGE_TABLE_ENTRY;
+struct _PROG_VK_STORAGE_TABLE_ENTRY
 {
     /* API resource binding */
     VSC_SHADER_RESOURCE_BINDING                 storageBinding;
@@ -905,8 +936,11 @@ typedef struct PROG_VK_STORAGE_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /*----------------------------------Image-related----------------------------------*/
     PROG_VK_IMAGE_DERIVED_INFO                  imageDerivedInfo[VSC_MAX_SHADER_STAGE_COUNT];
@@ -917,8 +951,10 @@ typedef struct PROG_VK_STORAGE_TABLE_ENTRY
 
     /* Different shader stage may have different HW mappings. */
     SHADER_UAV_SLOT_MAPPING                     hwMappings[VSC_MAX_SHADER_STAGE_COUNT];
-}
-PROG_VK_STORAGE_TABLE_ENTRY;
+
+    PROG_VK_STORAGE_TABLE_ENTRY*                pAliasedEntryList;
+    gctUINT                                     countOfAliasedEntries;
+};
 
 typedef struct PROG_VK_STORAGE_TABLE
 {
@@ -945,8 +981,11 @@ typedef struct PROG_VK_UNIFORM_BUFFER_TABLE_ENTRY
     /* Which shader stages access this entry */
     VSC_SHADER_STAGE_BIT                        stageBits;
 
-    /* Is this entry really used by shader */
+    /* Is this entry active in shader */
     gctUINT                                     activeStageMask;
+
+    /* Is this entry really used by shader */
+    gctUINT                                     usedStageMask;
 
     /* Different shader stage may have different HW mappings. */
     SHADER_CONSTANT_HW_LOCATION_MAPPING         hwMappings[VSC_MAX_SHADER_STAGE_COUNT];
