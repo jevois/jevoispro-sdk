@@ -1,0 +1,72 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable AR0234 camera sensor
+//
+
+/ {
+    // JEVOIS: camera sensor:
+	fragment@0 {
+		target = <&sensor>;
+
+		__overlay__ {
+			status = "okay";
+            sensor-name = "ar0234";
+
+            mclk-freq = <24000000>; // JEVOIS custom param: set mclock frequency
+		};
+	};
+
+    // JEVOIS: camera sensor image quality (IQ) module:
+	fragment@1 {
+		target = <&iq>;
+
+		__overlay__ {
+			status = "okay";
+            sensor-name = "ar0234";
+		};
+	};
+
+    // JEVOIS: camera sensor image signal processor (ISP) hardware support:
+	fragment@2 {
+		target = <&isp>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+    // JEVOIS: camera sensor adapter
+	fragment@3 {
+		target = <&adapter>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+    // JEVOIS: Camera sensor I2C uses i2c0 on the M.2 camera connector:
+	fragment@4 {
+        target = <&i2c0>;
+
+		__overlay__ {
+	        status = "okay";
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+            // JEVOIS: AR0234 SCCB address is 0x20/0x21
+			sensor-i2c@20 {
+				compatible = "arm, i2c-sensor";
+				reg = <0x20>;
+				reg-names = "i2c-sensor";
+				slave-addr = <0x20>;
+				reg-type = <2>;
+				reg-data-type = <1>;
+				link-device = <&phycsi>;
+				status = "okay";
+            };
+        };
+	};
+};

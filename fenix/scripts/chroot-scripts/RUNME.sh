@@ -54,19 +54,84 @@ cd /
 LC_ALL="C" date > /etc/fenix-build-time
 sync
 
+####################################################################################################
 # JeVois final fix:
-wget http://jevois.org/pkg/mediapipe-0.8-cp38-none-linux_aarch64.whl
+####################################################################################################
+
+# Need to update protobuf if we want to run the latest mediapipe:
+#pbver="21.2"
+#wget https://github.com/protocolbuffers/protobuf/releases/download/v${pbver}/protoc-${pbver}-linux-aarch_64.zip
+#unzip protoc-${pbver}-linux-aarch_64.zip -d /usr/local
+#/bin/rm protoc-${pbver}-linux-aarch_64.zip
+
+# may be needed by mediapipe? or maybe it will find the jevois version already...
+#ocvc="opencv_contrib_python-4.5.2.52-cp38-cp38-linux_aarch64.whl"
+#wget http://jevois.org/pkg/$ocvc
+#sudo pip3 install $ocvc
+#rm $ocvc
+
+#mp="mediapipe-0.8-cp38-none-linux_aarch64.whl" # version that shipped with jevois < 1.18
+mp=mediapipe-0.8-cp38-cp38-linux_aarch64.whl # works with jevois 1.18, objectron segfaults, no selfie
+#mp="mediapipe-0.8.10.2-cp38-cp38-linux_aarch64.whl" # works but twice slower...
+wget http://jevois.org/pkg/$mp
 sudo pip3 install pip --upgrade
 sudo pip3 install numpy --upgrade
+sudo pip3 install testresources
+sudo pip3 install setuptools --upgrade
+sudo pip3 install cpython
+sudo pip3 install pillow
 sudo pip3 install dataclasses
-sudo pip3 install mediapipe-0.8-cp38-none-linux_aarch64.whl
-rm mediapipe-0.8-cp38-none-linux_aarch64.whl
+sudo pip3 install protobuf==3.19.4
+sudo pip3 install $mp
+rm $mp
 
+# Disable hostapd as it pollutes our logs:
+systemctl disable hostapd
+
+# Pre-install Hailo drivers (Note: hailort deb is already installed from jevois.usc.edu):
+hailo="4.8.1"
+hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
+wget http://jevois.org/pkg/${hrtwheel}
+sudo pip3 install ${hrtwheel}
+/bin/rm ${hrtwheel}
+sudo pip3 install numpy --upgrade # hailo just downgraded numpy, try to upgrade it back...
+
+# Kernel to use for dkms and Hailo PCIe driver:
+export KVER="4.9.241"
+export ARCH="arm64"
+
+# Hailo makefile runs "depmod -a" and "modprobe" but that uses the host kernel...
+mv /usr/sbin/depmod /usr/sbin/depmod.orig
+mv /usr/sbin/modprobe /usr/sbin/modprobe.orig
+cp /usr/bin/true /usr/sbin/depmod
+cp /usr/bin/true /usr/sbin/modprobe
+
+hpcie="hailort-pcie-driver_${hailo}_all.deb"
+wget http://jevois.org/pkg/${hpcie}
+export kernelver="${KVER}"
+export KERNEL_DIR="/lib/modules/${KVER}/build"
+export Q=""
+yes N | dpkg -i ${hpcie}
+/bin/rm ${hpcie}
+
+/bin/rm /usr/sbin/depmod
+/bin/rm /usr/sbin/modprobe
+mv /usr/sbin/depmod.orig /usr/sbin/depmod
+mv /usr/sbin/modprobe.orig /usr/sbin/modprobe
+
+# now run depmod manually on our platform kernel:
+depmod -a ${KVER}
+
+# quiet down some hailo messages:
+echo "options hailo_pci force_desc_page_size=256" >> /share/opt/hailo/linux/pcie/hailo_pci.conf
+
+# Pre-install some wifi drivers:
 wget http://jevois.org/pkg/rtl8812au-jevois.tbz
 tar jxf rtl8812au-jevois.tbz
 /bin/rm rtl8812au-jevois.tbz
-
-systemctl disable hostapd
+ARCH=arm64 dkms add -k ${KVER} -m 8812au -v 4.2.3
+ARCH=arm64 dkms build -k ${KVER} -m 8812au -v 4.2.3
+ARCH=arm64 dkms install -k ${KVER} -m 8812au -v 4.2.3
 
 # tim-vx and galcore NPU driver (see https://github.com/opencv/opencv/wiki/TIM-VX-Backend-For-Running-OpenCV-On-NPU):
 #mkdir /opt
@@ -78,25 +143,8 @@ systemctl disable hostapd
 #/bin/cp -a /opt/aarch64_A311D_6.4.8/lib/* /usr/lib/
 #/bin/rm /usr/lib/galcore.ko
 
-# this does not work (wrong kernel detected), will have to run manually on platform:
-cd /
-cat <<-EOF > jevoispro-fixup.sh
-#!/bin/bash
-cd /usr/src/linux-headers-4.9.*/arch
-sudo ln -s arm64 aarch64
-cd /
-dkms add -m 8812au -v 4.2.3
-sudo dkms build -m 8812au -v 4.2.3
-sudo dkms install -m 8812au -v 4.2.3
-sudo systemctl set-default jevoispro.target
-
-sync
-sudo /bin/rm /jevoispro-fixup.sh
-sync
-shutdown -r now
-EOF
-
-chmod a+x jevoispro-fixup.sh
+# Boot into jevois GUI by default:
+systemctl set-default jevoispro.target
 
 # Clean up
 apt-get update

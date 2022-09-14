@@ -46,11 +46,11 @@ fi
 if [ $arch = "amd64" ]; then JVOPENCL=OFF; else JVOPENCL=ON; fi
 
 if [ "x$1" = "x-y" ]; then usedef=1; else usedef=0; fi
-function question { if [ $usedef -eq 1 ]; then REPLY="y"; else read -p "${1}? [Y/n] "; fi }
+function question { if [ $usedef -eq 1 ]; then REPLY="y"; else read -p "JEVOIS: ${1}? [Y/n] "; fi }
 
 ####################################################################################################
 # Install boost first and then decide on python version:
-sudo apt install -y libboost-all-dev
+sudo apt -y install libboost-all-dev
 if [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python38.so" ]; then pyver="3.8";
 elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python3-py37.so" ]; then pyver="3.7";
 elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python-py36.so" ]; then pyver="3.6";
@@ -118,7 +118,7 @@ fi
 ####################################################################################################
 # Set some defs needed by openvino and opencv:
 if [ "X$arch" != "Xamd64" ]; then
-    NEON="-DENABLE_NEON=ON"
+    NEON="-DENABLE_NEON=ON -DWITH_CAROTENE=ON"
     VINOARCH="aarch64" # only available when compiling openvino from source
 else
     VINOARCH="intel64"

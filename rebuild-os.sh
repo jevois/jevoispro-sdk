@@ -25,6 +25,7 @@ echo "Using JeVoisPro SDK root: ${r}"
 
 if [ ! -d "fenix" ]; then echo "Cannot find fenix/ -- ABORT"; exit 2; fi
 basedir=`pwd`
+echo "Cleaning old build... (will take a while)"
 sudo /bin/rm -rf fenix/build
 cd fenix
 

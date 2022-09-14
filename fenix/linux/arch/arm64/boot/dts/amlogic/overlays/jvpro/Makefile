@@ -3,6 +3,7 @@ dtbo-y += aux-i2c.dtbo \
             aux-spi.dtbo \
             aux-uart.dtbo \
             emmc.dtbo \
+            hailo.dtbo \
             icm20948.dtbo \
             imx290.dtbo \
             os08a10.dtbo \

@@ -13,6 +13,7 @@ max_freq_a73=2208
 # aux-onewire       -- Enable OneWire driver on AUX pin 3.
 # aux-spi           -- Enable SPI driver on AUX pins 1 (MOSI), 2 (MISO), 3 (SS), 4 (SCLK).
 # emmc              -- Enable custom eMMC, only for JeVois dual-TPU + eMMC board.
+# hailo             -- Enable Hailo8 neural accelerator on M.2 PCIe port.
 # icm20948          -- Enable ICM-20948 IMU (present on IMX290/OS08A10 camera boards) on JeVois M.2 sensor conn.
 # imx290            -- Enable Sony IMX290 2MP camera sensor on JeVois M.2 sensor conn.
 # os08a10           -- Enable Omnivision OS08A10 8MP camera sensor on JeVois M.2 sensor conn.

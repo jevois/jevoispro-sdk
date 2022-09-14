@@ -1,0 +1,22 @@
+/dts-v1/;
+/plugin/;
+
+//
+// JeVois-pro overlay to enable Hailo8 neural accelerator on PCIe M.2 board
+//
+
+/ {
+    // JEVOIS: reserve some CMA memory for Hailo8
+	fragment@0 {
+		target = <&reserved_memory>;
+
+		__overlay__ {
+		hailort_cma_reserved:linux,hailo_cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0x0 0x10000000>; // 256 MB for hailo DMA
+			alignment = <0x0 0x400000>;
+		    };
+        };
+	};
+};

@@ -120,6 +120,11 @@ int main (int argc, char **argv)
     temp = readfile("/sys/class/thermal/thermal_zone1/temp", 1);
     temp2 = readfile("/sys/class/apex/apex_0/temp", 0); if (temp2 > temp) temp = temp2;
     temp2 = readfile("/sys/class/apex/apex_1/temp", 0); if (temp2 > temp) temp = temp2;
+
+    // Hailo does not report temperature but needs cooling, so go full blast if hailo is present:
+    int fd = open("/sys/class/hailo_chardev/hailo0/device_id", O_RDONLY);
+    if (fd != -1) { temp = 100000; close(fd); }
+    
     if (temp < 25000) temp = 25000; else if (temp > 100000) temp = 100000;
 
     /*

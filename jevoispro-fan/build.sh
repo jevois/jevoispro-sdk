@@ -2,7 +2,7 @@
 
 make
 
-ver="1.0.0"
+ver="1.1.0"
 pkgrel="1"
 arch=`dpkg --print-architecture`
 uburel=`lsb_release -rs`

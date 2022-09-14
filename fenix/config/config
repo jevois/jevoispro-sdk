@@ -328,7 +328,7 @@ PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf lib
 #    libglfw3-dev
 
 PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev \
-     python3-pil python3-tflite-runtime python3-pycoral git"
+     python3-pil python3-tflite-runtime python3-pycoral git hailort"
 
 # Pre-install jevois and jevoisbase:
 PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform jevoispro-fan"
