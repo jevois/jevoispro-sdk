@@ -573,18 +573,18 @@ int isp_v4l2_ctrl_init( isp_v4l2_ctrl_t *ctrl )
     ADD_CTRL_STD( V4L2_CID_VFLIP, 0, 1, 1, 0 );
     /* exposure */
     ADD_CTRL_STD( V4L2_CID_AUTOGAIN, 0, 1, 1, 1 );
-    ADD_CTRL_STD( V4L2_CID_GAIN, 100, 3200, 1, 100 );
+    ADD_CTRL_STD( V4L2_CID_GAIN, 1, 5000, 1, 100 ); // JEVOIS min was 100, max 3200
     ADD_CTRL_STD_MENU( V4L2_CID_EXPOSURE_AUTO,
                        1, 0x0, 0 );
     ADD_CTRL_STD( V4L2_CID_EXPOSURE_ABSOLUTE,
-                  1, 1000, 1, 33 );
+                  1, 200, 1, 33 ); // JEVOIS MAX was 1000
     ADD_CTRL_STD( V4L2_CID_EXPOSURE_AUTO_PRIORITY,
                   0, 1, 1, 0 );
     /* white balance */
     ADD_CTRL_STD( V4L2_CID_AUTO_WHITE_BALANCE,
                   0, 1, 1, 1 );
     ADD_CTRL_STD( V4L2_CID_WHITE_BALANCE_TEMPERATURE,
-                  2000, 8000, 1000, 5000 );
+                  1000, 8000, 1000, 5000 ); // JEVOIS min was 2000
     /* focus */
     ADD_CTRL_STD( V4L2_CID_FOCUS_AUTO, 0, 1, 1, 1 );
     ADD_CTRL_STD( V4L2_CID_FOCUS_ABSOLUTE,

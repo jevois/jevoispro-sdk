@@ -81,6 +81,7 @@ static sensor_mode_t supported_modes[] =
 {
  // --------------------------------------------------
  {
+  // JEVOIS: 1080p30 works great
   .wdr_mode = WDR_MODE_LINEAR,
   .fps = 30 * 256,
   .resolution.width = 1920,
@@ -92,6 +93,34 @@ static sensor_mode_t supported_modes[] =
   .bayer = BAYER_RGGB,
   .dol_type = DOL_NON,
   .num = IMX290_SEQ_1080P_30FPS,
+ },
+ {
+  // JEVOIS: 1080p60 works great
+  .wdr_mode = WDR_MODE_LINEAR,
+  .fps = 60 * 256,
+  .resolution.width = 1920,
+  .resolution.height = 1080,
+  .bits = 12,
+  .exposures = 1,
+  .lanes = 4,
+  .bps = 891,
+  .bayer = BAYER_RGGB,
+  .dol_type = DOL_NON,
+  .num = IMX290_SEQ_1080P_60FPS,
+ },
+ {
+  // JEVOIS: 1080p120 works ok except colors look pink/purple when clipping brightness
+  .wdr_mode = WDR_MODE_LINEAR,
+  .fps = 120 * 256,
+  .resolution.width = 1920,
+  .resolution.height = 1080,
+  .bits = 10,
+  .exposures = 1,
+  .lanes = 4,
+  .bps = 891,
+  .bayer = BAYER_RGGB,
+  .dol_type = DOL_NON,
+  .num = IMX290_SEQ_1080P_120FPS,
  },
  /*
  {
@@ -135,21 +164,6 @@ static sensor_mode_t supported_modes[] =
   .bayer = BAYER_RGGB,
   .dol_type = DOL_NON,
   .num = IMX290_SEQ_CIF1080_30FPS,
- },
- */
- /*
- {
-  .wdr_mode = WDR_MODE_LINEAR,
-  .fps = 60 * 256,
-  .resolution.width = 1920,
-  .resolution.height = 1080,
-  .bits = 12,
-  .exposures = 1,
-  .lanes = 4,
-  .bps = 891,
-  .bayer = BAYER_RGGB,
-  .dol_type = DOL_NON,
-  .num = IMX290_SEQ_1080P_60FPS,
  },
  */
  /*
@@ -742,7 +756,7 @@ static void sensor_set_mode(void *ctx, uint8_t mode)
   
   setting_num = param->modes_table[mode].num;
 
-  // Check sensor ID one more time to make surr I2C is ok:
+  // Check sensor ID one more time to make sure I2C is ok:
   if (sensor_get_id(ctx) != 0) return;
 
   LOG(LOG_INFO, "JEVOIS: sensor_set_mode %d", mode);
@@ -752,19 +766,19 @@ static void sensor_set_mode(void *ctx, uint8_t mode)
   switch (param->modes_table[mode].wdr_mode)
   {
   case WDR_MODE_LINEAR:
-    LOG(LOG_INFO, "JEVOIS: sensor_set_mode load seq %d WDR_MODE_LINEAR", setting_num);
-    p_ctx->s_fps = 30;//////param->modes_table[mode].fps >> 8; // JEVOIS WAS 30
+    p_ctx->s_fps = param->modes_table[mode].fps >> 8;
     p_ctx->again_delay = 0;
     param->integration_time_apply_delay = 2;
     param->isp_exposure_channel_delay = 0;
+    LOG(LOG_INFO, "JEVOIS: sensor_set_mode load seq %d WDR_MODE_LINEAR %dfps", setting_num, p_ctx->s_fps);
     break;
     
   case WDR_MODE_FS_LIN:
-    LOG(LOG_INFO, "JEVOIS: sensor_set_mode load seq %d WDR_MODE_FS_LIN", setting_num);
     p_ctx->again_delay = 0;
     param->integration_time_apply_delay = 2;
     param->isp_exposure_channel_delay = 0;
-    p_ctx->s_fps = 50;
+    p_ctx->s_fps = param->modes_table[mode].fps >> 7; // JEVOIS CHECK? 2x desired final frame rate?
+    LOG(LOG_INFO, "JEVOIS: sensor_set_mode load seq %d WDR_MODE_FS_LIN %dfps", setting_num, p_ctx->s_fps >> 1);
     break;
     
   default: LOG(LOG_ERR, "Invalid wdr_mode 0x%x\n", param->modes_table[mode].wdr_mode); return;

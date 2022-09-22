@@ -250,9 +250,55 @@ static acam_reg_t linear_1080p_60fps[] =
  IMX290_SET_X_OUT_SIZE(IMX290_VAL_X_OUT_SIZE_1080P),  // Set X out size
  IMX290_SOUTSEL_NONE,                                 // Set which sync pulses to send out to pins
  
- IMX290_SET_SHS1(100),                                // Storage time adjustments, in line units
+ IMX290_SET_SHS1(1),                                  // Storage time adjustments, in line units
+ IMX290_SET_SHS2(0),
+ IMX290_SET_RHS1(0),
+
  IMX290_SET_GAIN(32),                                 // Set gain (0.0 dB to 63.0 dB / 0.3 dB step)
 
+ IMX290_MASTER_START,                                 // Start capturing in MASTER or SLAVE mode
+ IMX290_SEQUENCE_END
+};
+
+// ####################################################################################################
+static acam_reg_t linear_1080p_120fps[] =
+{
+ // IMX290_SOFT_RESET,
+ IMX290_ENTER_STANDBY,                                // Enter standby mode so we can adjust settings
+
+ IMX290_PRESETS_DATASHEET,                            // Apply presets recommended by the datasheet
+ IMX290_UNDOC_SETTINGS,                               // Apply additional undocumented presets
+
+ IMX290_INCK_37125_1080P,                             // Select master clock rate (37.125MHz or 74.250MHz)
+ IMX290_SET_10BIT,                                    // Select pixel data bit width (12 or 10)
+ IMX290_SET_DOL_LINEAR,                               // Select DOL-WDR type (LINEAR or FS_LIN)
+ IMX290_SET_MIPI_4LANES,                              // Set MIPI output and number of lanes (2 or 4)
+
+ IMX290_SET_WIN_1080P,                                // Set window mode (1080P, 720P, or CROP from 1080P)
+ IMX290_SET_WIN_VFLIP(0),                             // Set Vertical image flip (0 or 1)
+ IMX290_SET_WIN_HFLIP(0),                             // Set horizontal image flip (0 or 1)
+ IMX290_SET_TIMINGS(1080P_4LANES_120FPS),             // Fine timing parameters for selected mode
+ IMX290_SET_REPETITION_4LANES_120FPS,                 // Adjust timing for selected mode
+ IMX290_SET_FRAME_120FPS,                             // Set frame rate (30FPS, 60FPS, 120FPS, 25FPS, 50FPS, 100FPS)
+ IMX290_SET_HCG,                                      // Set conversion gain (HCG or LCG)
+ IMX290_SET_VMAX(IMX290_VMAX_1080P),                  // Set vertical span
+ IMX290_SET_HMAX(IMX290_HMAX_1080P_120FPS),           // Set horizontal span
+ IMX290_SET_OPB_SIZE_V(IMX290_VAL_OPB_SIZE_V_1080P),  // Set vertical OB size
+ IMX290_SET_Y_OUT_SIZE(IMX290_VAL_Y_OUT_SIZE_1080P),  // Set Y out size
+ IMX290_SET_X_OUT_SIZE(IMX290_VAL_X_OUT_SIZE_1080P),  // Set X out size
+ IMX290_SOUTSEL_NONE,                                 // Set which sync pulses to send out to pins
+ 
+ IMX290_SET_SHS1(1),                                  // Storage time adjustments, in line units
+ IMX290_SET_SHS2(0),
+ IMX290_SET_RHS1(0),
+
+ IMX290_SET_GAIN(32),                                 // Set gain (0.0 dB to 63.0 dB / 0.3 dB step)
+
+ // IMX290_SET_BLKLEVEL(IMX290_VAL_BLKLEVEL_12BIT),
+ IMX290_SET_BLKLEVEL(0xe0),
+
+
+ 
  IMX290_MASTER_START,                                 // Start capturing in MASTER or SLAVE mode
  IMX290_SEQUENCE_END
 };
@@ -1400,40 +1446,42 @@ static acam_reg_t settings_context_imx290[] = {
 // Indices in the table below:
 #define IMX290_SEQ_1080P_30FPS 0
 #define IMX290_SEQ_1080P_60FPS 1
-#define IMX290_SEQ_720P_30FPS 2
-#define IMX290_SEQ_720P_30FPS_10BITS 3
-#define IMX290_SEQ_SXGA_30FPS 4
-#define IMX290_SEQ_WXGA_30FPS 5
-#define IMX290_SEQ_XGA_30FPS 6
-#define IMX290_SEQ_SVGA_30FPS 7
-#define IMX290_SEQ_VGA_30FPS 8
-#define IMX290_SEQ_CIF_30FPS 9
-#define IMX290_SEQ_QVGA_30FPS 10
-#define IMX290_SEQ_VGA1080_30FPS 11
-#define IMX290_SEQ_SXGA1080_30FPS 12
-#define IMX290_SEQ_CIF1080_30FPS 13
-#define IMX290_SEQ_TEST_PATTERN 19
+#define IMX290_SEQ_1080P_120FPS 2
+#define IMX290_SEQ_720P_30FPS 3
+#define IMX290_SEQ_720P_30FPS_10BITS 4
+#define IMX290_SEQ_SXGA_30FPS 5
+#define IMX290_SEQ_WXGA_30FPS 6
+#define IMX290_SEQ_XGA_30FPS 7
+#define IMX290_SEQ_SVGA_30FPS 8
+#define IMX290_SEQ_VGA_30FPS 9
+#define IMX290_SEQ_CIF_30FPS 10
+#define IMX290_SEQ_QVGA_30FPS 11
+#define IMX290_SEQ_VGA1080_30FPS 12
+#define IMX290_SEQ_SXGA1080_30FPS 13
+#define IMX290_SEQ_CIF1080_30FPS 14
+#define IMX290_SEQ_TEST_PATTERN 20
 
 static const acam_reg_t *imx290_seq_table[] =
 {
  linear_1080p_30fps, // 0
  linear_1080p_60fps, // 1
- linear_720p_30fps,  // 2
- linear_720p_30fps_10bits, // 3
- linear_sxga_30fps, // 4
- linear_wxga_30fps, // 5
- linear_xga_30fps,  // 6
- linear_svga_30fps, // 7
- linear_vga_30fps,  // 8
- linear_cif_30fps,  // 9
- linear_qvga_30fps, // 10
- linear_vga1080_30fps, // 11
- linear_sxga1080_30fps, // 12
- linear_cif1080_30fps, // 13
+ linear_1080p_120fps, // 2
+ linear_720p_30fps,  // 3
+ linear_720p_30fps_10bits, // 4
+ linear_sxga_30fps, // 5
+ linear_wxga_30fps, // 6
+ linear_xga_30fps,  // 7
+ linear_svga_30fps, // 8
+ linear_vga_30fps,  // 9
+ linear_cif_30fps,  // 10
+ linear_qvga_30fps, // 11
+ linear_vga1080_30fps, // 12
+ linear_sxga1080_30fps, // 13
+ linear_cif1080_30fps, // 14
 
  // keep compiler happy
  linear_1080p_50fps_446Mbps_4lane_10bits,
- linear_1080p_60fps_446Mbps_4lane_10bits,
+ linear_1080p_60fps_446Mbps_4lane_10bits, // frame mostly grey except purple on edges
  dol_1080p_25fps_4lane_10bits,
  dol_1080p_30fps_4lane_10bits,
  dol_1080p_60fps_4lane_10bits,
