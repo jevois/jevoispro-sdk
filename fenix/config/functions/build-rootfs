@@ -348,7 +348,7 @@ create_rootfs_cache()
     # JEVOIS: add source for jevois packages. Since it is an https repo, bypass apt-cacher-ng:
     apt_extra="${apt_extra} -o Acquire::https::Proxy=DIRECT"
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
-    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/apt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
+    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/devapt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/jevois.list update"'
     echo "JEVOIS: added jevois.usc.edu deb source for jevois packages."
 

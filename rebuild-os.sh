@@ -8,7 +8,7 @@
 # Optional -deb argument also create a deb package that contains all the results.
 
 # These definitions are used to create the deb package only:
-ver="1.18.0"
+ver="1.19.0"
 gitbranch="master"
 pkgrel="1"
 uburel=`lsb_release -rs`
