@@ -72,6 +72,10 @@ case "$TARGET" in
 		build_updater_deb
 		[[ $(type -t build_deb_packages_platform) == function ]] && build_deb_packages_platform
 		;;
+    *)
+        echo "ERROR: incorrect build command"
+        exit 1
+        ;;
 esac
 
 echo -e "\nDone."

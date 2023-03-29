@@ -42,6 +42,10 @@ extern void sensor_init_imx307( void** ctx, sensor_control_t*, void*) ;
 extern void sensor_deinit_imx307( void *ctx ) ;
 extern uint32_t get_calibrations_imx307( uint32_t ctx_num,void * sensor_arg,ACameraCalibrations *) ;
 
+extern void sensor_init_ar0234( void** ctx, sensor_control_t*, void*) ;
+extern void sensor_deinit_ar0234( void *ctx ) ;
+extern uint32_t get_calibrations_ar0234( uint32_t ctx_num,void * sensor_arg,ACameraCalibrations *) ;
+
 
 #define SENSOR_INIT_SUBDEV_FUNCTIONS_OS08A10 sensor_init_ov08a10
 #define SENSOR_DEINIT_SUBDEV_FUNCTIONS_OS08A10 sensor_deinit_ov08a10
@@ -63,5 +67,9 @@ extern uint32_t get_calibrations_imx307( uint32_t ctx_num,void * sensor_arg,ACam
 #define SENSOR_INIT_SUBDEV_FUNCTIONS_IMX307 sensor_init_imx307
 #define SENSOR_DEINIT_SUBDEV_FUNCTIONS_IMX307 sensor_deinit_imx307
 #define CALIBRATION_SUBDEV_FUNCTIONS_IMX307 get_calibrations_imx307
+
+#define SENSOR_INIT_SUBDEV_FUNCTIONS_AR0234 sensor_init_ar0234
+#define SENSOR_DEINIT_SUBDEV_FUNCTIONS_AR0234 sensor_deinit_ar0234
+#define CALIBRATION_SUBDEV_FUNCTIONS_AR0234 get_calibrations_ar0234
 
 

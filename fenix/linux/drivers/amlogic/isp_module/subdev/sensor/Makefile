@@ -46,6 +46,7 @@ FW_SRC_OBJ := app/soc_sensor.o \
 			  src/driver/sensor/IMX290_drv.o \
 			  src/driver/sensor/OV08a10_drv.o \
 			  src/driver/sensor/IMX481_drv.o \
+			  src/driver/sensor/ar0234_drv.o \
 			  src/driver/sensor/ACameraDefault.o \
 			  src/driver/sensor/sensor_bsp_common.o
 

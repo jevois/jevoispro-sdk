@@ -56,12 +56,12 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
-            // JEVOIS: OS08A10 SCCB address is 0x20/0x21
-			sensor-i2c@20 {
+            // JEVOIS: OV2312 SCCB address is 0x60 (0xc0) when SID is pulled low
+			sensor-i2c@60 {
 				compatible = "arm, i2c-sensor";
-				reg = <0x20>;
+				reg = <0x60>;
 				reg-names = "i2c-sensor";
-				slave-addr = <0x20>;
+				slave-addr = <0x60>;
 				reg-type = <2>;
 				reg-data-type = <1>;
 				link-device = <&phycsi>;

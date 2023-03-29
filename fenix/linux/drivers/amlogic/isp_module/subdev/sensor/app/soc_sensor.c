@@ -52,6 +52,7 @@ struct SensorConversion ConversionTable[] = {
     {SENSOR_INIT_SUBDEV_FUNCTIONS_IMX227, SENSOR_DEINIT_SUBDEV_FUNCTIONS_IMX227, "imx227"},
     {SENSOR_INIT_SUBDEV_FUNCTIONS_IMX481, SENSOR_DEINIT_SUBDEV_FUNCTIONS_IMX481, "imx481"},
     {SENSOR_INIT_SUBDEV_FUNCTIONS_IMX307, SENSOR_DEINIT_SUBDEV_FUNCTIONS_IMX307, "imx307"},
+    {SENSOR_INIT_SUBDEV_FUNCTIONS_AR0234, SENSOR_DEINIT_SUBDEV_FUNCTIONS_AR0234, "ar0234"},
 };
 
 
@@ -105,19 +106,22 @@ static void parse_param(char *buf_orig, char **parm){
     }
 }
 
+/*
 static const char *sensor_reg_usage_str = {
     "Usage:\n"
     "echo r addr(H) > /sys/devices/platform/sensor/sreg;\n"
     "echo w addr(H) value(H) > /sys/devices/platform/sensor/sreg;\n"
     "echo d addr(H) num(D) > /sys/devices/platform/sensor/sreg; dump reg from addr\n"
-};
+    };*/
+static unsigned int last_reg_val = 0;
 
 static ssize_t sreg_read(
     struct device *dev,
     struct device_attribute *attr,
     char *buf)
 {
-    return sprintf(buf, "%s\n", sensor_reg_usage_str);
+  // WAS: return sprintf(buf, "%s\n", sensor_reg_usage_str);
+    return sprintf(buf, "%x\n", last_reg_val);
 }
 
 static ssize_t sreg_write(
@@ -160,6 +164,7 @@ static ssize_t sreg_write(
         reg_addr = val;
         reg_val = ctx->camera_control.read_sensor_register( ctx->camera_context, reg_addr);
         pr_info("SENSOR READ[0x%04x]=0x%02x\n", reg_addr, reg_val);
+        last_reg_val = reg_val;
     } else if (!strcmp(parm[0], "w")) {
         if (!parm[1] || (kstrtoul(parm[1], 16, &val) < 0)) {
             ret = -EINVAL;
@@ -175,6 +180,7 @@ static ssize_t sreg_write(
         pr_info("SENSOR WRITE[0x%04x]=0x%02x\n", reg_addr, reg_val);
         reg_val = ctx->camera_control.read_sensor_register( ctx->camera_context, reg_addr);
         pr_info("SENSOR READ[0x%04x]=0x%02x\n", reg_addr, reg_val);
+        last_reg_val = reg_val;
     } else if (!strcmp(parm[0], "d")) {
         if (!parm[1] || (kstrtoul(parm[1], 16, &val) < 0)) {
             ret = -EINVAL;

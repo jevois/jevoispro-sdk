@@ -54,6 +54,8 @@ FW_SRC_OBJ := app/soc_iq.o \
 			  src/calibration/acamera_calibrations_dynamic_fs_lin_imx290.o \
 			  src/calibration/acamera_calibrations_dynamic_linear_os08a10.o \
 			  src/calibration/acamera_calibrations_static_linear_imx290.o \
+			  src/calibration/acamera_calibrations_dynamic_linear_ar0234.o \
+			  src/calibration/acamera_calibrations_static_linear_ar0234.o \
 			  src/calibration/acamera_calibrations_dynamic_fs_lin_dummy.o
 
 iv009_isp_iq-objs += $(FW_SRC_OBJ) 

@@ -55,7 +55,9 @@ static void start_streaming( void *ctx );
 static void stop_streaming( void *ctx );
 
 static sensor_mode_t supported_modes[] = {
+                                          /*
     {
+     // JEVOIS: no good
         .wdr_mode = WDR_MODE_LINEAR,
         .fps = 5 * 256,
         .resolution.width = 1280,
@@ -68,12 +70,41 @@ static sensor_mode_t supported_modes[] = {
         .dol_type = DOL_NON,
         .num = 1,
     },
+                                          */
+    {
+        .wdr_mode = WDR_MODE_LINEAR,
+        .fps = 30 * 256,
+        .resolution.width = 3840,
+        .resolution.height = 2160,
+        .bits = 12,///10,
+        .exposures = 1,////2,
+        .lanes = 4,
+        .bps = 1440,//800,
+        .bayer = BAYER_BGGR,
+        .dol_type = DOL_NON,
+        .num = 4,
+    },
+                                          
+    {
+        .wdr_mode = WDR_MODE_LINEAR,
+        .fps = 60 * 256,
+        .resolution.width = 3840,
+        .resolution.height = 2160,
+        .bits = 12, //10
+        .exposures = 1,///2,
+        .lanes = 4,
+        .bps = 1440,
+        .bayer = BAYER_BGGR,
+        .dol_type = DOL_NON,
+        .num = 5,
+    },
+
     {
         .wdr_mode = WDR_MODE_LINEAR,
         .fps = 30 * 256,
         .resolution.width = 1920,
         .resolution.height = 1080,
-        .bits = 10,
+        .bits = 12,///10,
         .exposures = 1,
         .lanes = 4,
         .bps = 800,
@@ -81,51 +112,28 @@ static sensor_mode_t supported_modes[] = {
         .dol_type = DOL_NON,
         .num = 2,
     },
-   {
+
+    {
         .wdr_mode = WDR_MODE_LINEAR,
         .fps = 60 * 256,
         .resolution.width = 1920,
         .resolution.height = 1080,
-        .bits = 10,
-        .exposures = 2,
+        .bits = 12,///10,
+        .exposures = 1,///2,
         .lanes = 4,
         .bps = 1440,
         .bayer = BAYER_BGGR,
         .dol_type = DOL_NON,
         .num = 3,
     },
+
     {
-        .wdr_mode = WDR_MODE_LINEAR,
-        .fps = 30 * 256,
-        .resolution.width = 3840,
-        .resolution.height = 2160,
-        .bits = 10,
-        .exposures = 2,
-        .lanes = 4,
-        .bps = 800,
-        .bayer = BAYER_BGGR,
-        .dol_type = DOL_NON,
-        .num = 4,
-    },
-    {
-        .wdr_mode = WDR_MODE_LINEAR,
-        .fps = 60 * 256,
-        .resolution.width = 3840,
-        .resolution.height = 2160,
-        .bits = 10,
-        .exposures = 2,
-        .lanes = 4,
-        .bps = 1440,
-        .bayer = BAYER_BGGR,
-        .dol_type = DOL_NON,
-        .num = 5,
-    },
-    {
+     // grabs but mega noise, 37fps
         .wdr_mode = WDR_MODE_FS_LIN,
         .fps = 60 * 256,
         .resolution.width = 1920,
         .resolution.height = 1080,
-        .bits = 10,
+        .bits = 12, // was 10
         .exposures = 2,
         .lanes = 4,
         .bps = 960,
@@ -261,6 +269,38 @@ static void sensor_alloc_integration_time( void *ctx, uint16_t *int_time_S, uint
     }
 }
 
+//####################################################################################################
+static int32_t sensor_ir_cut_set(void *ctx, int32_t ir_cut_state)
+{
+  sensor_context_t *t_ctx = ctx; sensor_bringup_t* sensor_bp = t_ctx->sbp;
+  int ret;
+
+  LOG(LOG_ERR, "ir_cut_state = %d", ir_cut_state);
+  LOG(LOG_INFO, "entry ir cut");
+  
+  if (sensor_bp->ir_gname[0] <= 0 && sensor_bp->ir_gname[1] <= 0) { pr_err("get gpio id fail\n"); return 0; }
+  
+  if (ir_cut_state == 1)
+  {
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[1], 1); if (ret < 0) pr_err("set ircut fail\n");
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[0], 0); if (ret < 0) pr_err("set ircut fail\n");
+    mdelay(500);
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[0], 1); if (ret < 0) pr_err("set ircut fail\n");
+  }
+  else if (ir_cut_state == 0)
+  {
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[1], 0); if (ret < 0) pr_err("set ircut fail\n");
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[0], 1); if (ret < 0) pr_err("set ircut fail\n");
+    mdelay(500);
+    ret = pwr_ir_cut_enable(sensor_bp, sensor_bp->ir_gname[1], 1); if (ret < 0) pr_err("set ircut fail\n");
+  }
+  else if (ir_cut_state == 2) return 0;
+  else LOG(LOG_ERR, "sensor ir cut set failed");
+  
+  LOG(LOG_INFO, "exit ir cut");
+  return 0;
+}
+/*
 static int32_t sensor_ir_cut_set( void *ctx, int32_t ir_cut_state )
 {
     sensor_context_t *t_ctx = ctx;
@@ -297,6 +337,7 @@ static int32_t sensor_ir_cut_set( void *ctx, int32_t ir_cut_state )
     LOG( LOG_INFO, "exit ir cut" );
     return 0;
 }
+*/
 
 static void sensor_update( void *ctx )
 {
@@ -586,6 +627,29 @@ void sensor_init_ov08a10( void **ctx, sensor_control_t *ctrl, void *sbp )
     static sensor_context_t s_ctx;
     int ret;
     sensor_bringup_t* sensor_bp = (sensor_bringup_t*) sbp;
+
+  // JEVOIS: turn on power
+#if NEED_CONFIG_BSP
+  pr_info("JEVOIS: sensor power on\n");
+  ret = pwr_am_enable(sensor_bp, "power-enable", 1);
+  if (ret < 0) pr_err("set power fail\n");
+  system_timer_usleep(5000); // power up settle delay
+#endif
+  
+  pr_info("JEVOIS: enable clock\n");
+  ret = clk_am_enable(sensor_bp, "gen_clk");
+  if (ret < 0) pr_err("set mclk fail\n");
+  system_timer_usleep(25000); // clock settle delay
+  
+#if NEED_CONFIG_BSP
+  pr_info("JEVOIS: sensor reset enable\n");
+  ret = reset_am_enable(sensor_bp, "reset", 1);
+  if (ret < 0) pr_info("set reset fail\n");
+  system_timer_usleep(50000); // reset delay
+#endif
+  /*
+
+    
 #if NEED_CONFIG_BSP
     ret = pwr_am_enable(sensor_bp, "power-enable", 0);
     if (ret < 0 )
@@ -603,7 +667,7 @@ void sensor_init_ov08a10( void **ctx, sensor_control_t *ctrl, void *sbp )
     if (ret < 0 )
         pr_err("set reset fail\n");
 #endif
-
+  */
     s_ctx.sbp = sbp;
 
     *ctx = &s_ctx;
@@ -656,12 +720,22 @@ void sensor_init_ov08a10( void **ctx, sensor_control_t *ctrl, void *sbp )
     ctrl->stop_streaming = stop_streaming;
     ctrl->sensor_test_pattern = sensor_test_pattern;
 
-    // Reset sensor during initialization
+  // Reset sensor during initialization
+  pr_info("JEVOIS: sensor HW reset start\n");
+  sensor_hw_reset_enable();
+  system_timer_usleep(1000); // reset at least 1 ms
+  sensor_hw_reset_disable();
+  system_timer_usleep(50000); // wait for chip to come back up
+  pr_info("JEVOIS: sensor HW reset done\n");
+
+  /*
+  // Reset sensor during initialization
     sensor_hw_reset_enable();
     system_timer_usleep( 1000 ); // reset at least 1 ms
     sensor_hw_reset_disable();
     system_timer_usleep( 1000 );
-
+  */
+  
     LOG(LOG_ERR, "%s: Success subdev init\n", __func__);
 }
 
