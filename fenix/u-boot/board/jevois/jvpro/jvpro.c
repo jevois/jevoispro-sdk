@@ -85,8 +85,8 @@ int serial_set_pin_port(unsigned long port_base)
 
 int dram_init(void)
 {
-	gd->ram_size = PHYS_SDRAM_1_SIZE;
-	return 0;
+  gd->ram_size = (((readl(AO_SEC_GP_CFG0)) & 0xFFFF0000) << 4);
+  return 0;
 }
 
 /* secondary_boot_func
