@@ -85,8 +85,6 @@ cd ..
 
 # cleanup a bit:
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/lab
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
@@ -129,4 +127,12 @@ fi
 img=`/bin/ls fenix/build/images/JVPRO_Ubuntu-xfce-focal_Linux-4.9_arm64_SD-USB*.img`
 imgname=`basename $img`
 sudo mv $img .
+
+
+# now remove include/jevois and libjevois from the local sysroot copy so they will not be selected when we locally
+# recompile our code:
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
+
+
 echo "ALL DONE: IMAGE TO FLASH TO SD: $imgname"

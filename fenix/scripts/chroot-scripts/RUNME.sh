@@ -157,5 +157,7 @@ apt-get -y clean
 apt-get -y autoclean
 history -c
 
+/bin/rm -rf /jevois # not sure how that one got created in the first place...
+
 # Self-deleting
 rm $0
