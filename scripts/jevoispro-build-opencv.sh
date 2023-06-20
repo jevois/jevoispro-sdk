@@ -13,11 +13,11 @@ fi
 
 # OpenCV version to build:
 ma=4
-mi=6
+mi=7
 pa=0
 
-vino="2022.1" # release
-vinobranch="releases/2022/1" # github branch
+vino="2022.3" # release
+vinobranch="releases/2022/3" # github branch
 
 # note: for vino 2021.4 use -DINF_ENGINE_RELEASE=${vino//./0}0000 \
 # note: for vino 2021.4.2 use -DINF_ENGINE_RELEASE=${vino//./0}00 \
@@ -78,13 +78,23 @@ packages=( build-essential python2.7-dev gcc-${gccver} g++-${gccver} gfortran-${
            libcaffe-cpu-dev curl wget libssl-dev ca-certificates git pkg-config automake libtool shellcheck python
            libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev 
            # for openvino:
-           clang-format libssl-dev ca-certificates git-lfs libboost-regex-dev libgtk2.0-dev pkg-config
-           unzip automake libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev libglib2.0-dev libgtk2.0-dev
-           libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev scons )
+           clang-12 libclang-12-dev clang-format-9 ccache libssl-dev ca-certificates git-lfs libboost-regex-dev
+           libgtk2.0-dev pkg-config libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev libglib2.0-dev
+           libgtk2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev scons patchelf
+           lintian file gzip libpugixml-dev libva-dev python3-pip python3-venv python3-enchant python3-setuptools
+           libpython3-dev libgflags-dev zlib1g-dev libudev1 libusb-1.0-0 libusb-1.0-0-dev libtinfo5 git-lfs libjson-c4
+           libboost-filesystem1.71.0 libboost-program-options1.71.0 libenchant1c2a nlohmann-json3-dev )
+
+# openvino needs libcudnn8-dev libcutensor-dev which is installed from nvidia apt repo...
 
 # libopenjpip-dec-server libopenjpip-server libopenjpip-viewer
 
 # openvino uses gcc-multilib g++-multilib but this removes arm g++-10
+
+# on platform, opencl headers conflict with aml-npu package, which also provides them:
+if [ $arch = "amd64" ]; then
+    packages+=( ocl-icd-opencl-dev opencl-headers )
+fi
 
 ####################################################################################################
 question "Install/update packages"
@@ -165,22 +175,47 @@ if [ "X$REPLY" != "Xn" ]; then
 
     cd openvino-${vino}
 
-    # Install dependencies
-    ./install_build_dependencies.sh -y
+    # Build process is quite different on host vs platform:
+    if [ $arch = "amd64" ]; then
     
-    # Ok, build it:
-    mkdir build && cd build
+        # Install dependencies
+        ./install_build_dependencies.sh -y
+        pip3 install -r src/bindings/python/wheel/requirements-dev.txt
+        pip3 install -r cmake/developer_package/ncc_naming_style/requirements_dev.txt
 
-    cmake -DCMAKE_BUILD_TYPE=Release -DNGRAPH_ONNX_IMPORT_ENABLE=ON \
-          -DIE_EXTRA_MODULES=../openvino_contrib-${vino}/modules -DBUILD_java_api=OFF \
-          -DENABLE_OPENCV=ON \
-          -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
-          -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
-          -DCPACK_SET_DESTDIR=ON \
-          ..
+        export CUDNN_PATH=/usr/local/cuda
+        VINOCUDA="-DCMAKE_CUDA_COMPILER=/usr/local/cuda-11/bin/nvcc"
+
+        # Ok, build it:
+        mkdir build && cd build
+
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DIE_EXTRA_MODULES=../openvino_contrib-${vino}/modules -DBUILD_java_api=OFF \
+              -DENABLE_OPENCV=ON -DENABLE_SAMPLES=OFF -DENABLE_TESTS=OFF -DENABLE_PYTHON=OFF \
+              -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
+              -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
+              -DCPACK_SET_DESTDIR=ON ${VINOCUDA} \
+              ..
     
-    make -j ${job}
+        make -j ${job}
+    else
+        # Build on arm64:
+        sudo apt install -y git cmake scons build-essential
+        
+        mkdir build && cd build
 
+        cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_SAMPLES=OFF -DENABLE_TESTS=OFF \
+              -DOPENVINO_EXTRA_MODULES=../openvino_contrib-${vino}/modules/arm_plugin \
+              -DARM_COMPUTE_SCONS_JOBS=${job} \
+              -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
+              -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
+              -DCPACK_SET_DESTDIR=ON \
+              ..
+        
+        make -j ${job}
+        #cmake --build . --parallel 
+    fi
+    
     sudo cmake --install . --prefix /usr/share/jevoispro-openvino-${vino}
 
     # Description
@@ -193,7 +228,7 @@ EOF
 #!/bin/sh
 f=/etc/ld.so.conf.d/jevoispro-openvino.conf
 echo "/usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}" >> \${f}
-echo "/usr/share/jevoispro-openvino-${vino}/runtime/3rdparty/tbb/lib" >> \${f}
+#echo "/usr/share/jevoispro-openvino-${vino}/runtime/3rdparty/tbb/lib" >> \${f}
 
 ldconfig
 EOF

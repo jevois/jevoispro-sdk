@@ -153,6 +153,8 @@ ExecStart=/usr/bin/jevoispro.sh
 Type=simple
 Restart=on-failure
 TimeoutSec=180
+StandardOutput=/dev/null
+StandardError=/dev/null
 
 [Install]
 WantedBy=jevoispro.target
@@ -229,6 +231,8 @@ install_distribution_specific()
 			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable watchdog.service"'
 			# Disable Lirc service
 			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable lircd.socket lircd.service lircd-setup.service lircd-uinput.service lircmd.service irexec.service"'
+            # Disable hostapd
+			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable hostapd.service"'
 		fi
 		# Journal service adjustements
 		sed -i "s/#Storage=.*/Storage=volatile/g" $ROOTFS_TEMP/etc/systemd/journald.conf
@@ -348,17 +352,17 @@ create_rootfs_cache()
     # JEVOIS: add source for jevois packages. Since it is an https repo, bypass apt-cacher-ng:
     apt_extra="${apt_extra} -o Acquire::https::Proxy=DIRECT"
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
-    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/devapt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
+    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/apt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/jevois.list update"'
     echo "JEVOIS: added jevois.usc.edu deb source for jevois packages."
 
     # JEVOIS: add source for coral edge tpu packages. Since it is an https repo, bypass apt-cacher-ng:
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"'
-    LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-edgetpu.list
-    LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-cloud-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-cloud.list
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-edgetpu.list update"'
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-cloud.list update"'
-    echo "JEVOIS: added Coral Edge TPU deb source for jevois packages."
+    #eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -"'
+    #LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-edgetpu.list
+    #LC_ALL=C LANG=C echo "deb https://packages.cloud.google.com/apt coral-cloud-stable main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/coral-cloud.list
+    #eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-edgetpu.list update"'
+    #eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/coral-cloud.list update"'
+    #echo "JEVOIS: added Coral Edge TPU deb source for jevois packages."
         
 	# compressing packages list to gain some space
 	echo "Acquire::GzipIndexes "true"; Acquire::CompressionTypes::Order:: "gz";" > $ROOTFS_TEMP/etc/apt/apt.conf.d/02compress-indexes

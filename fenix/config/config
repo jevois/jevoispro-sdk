@@ -323,16 +323,11 @@ PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf lib
     libflac-dev libogg-dev libvorbis-dev libopenal-dev libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev \
     libglm-dev libusb-dev libsdl2-dev"
 
-#    libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libsdl2-net-dev"
-#lsb lib32stdc++6 libqt4-dev
-#    libglfw3-dev
-
 PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev \
-     python3-pil python3-tflite-runtime python3-pycoral git hailort"
+     python3-pil python3-tflite-runtime python3-pycoral pycoral-examples git hailort jevoispro-fan"
 
-# Pre-install jevois and jevoisbase:
-PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform jevoispro-fan"
-#PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-fan"
+# Pre-install jevois and jevoisbase: (comment out when switching to a new version):
+PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform"
 
 PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACKAGE_LIST_JEVOIS_COMPILE} \
     ${PACKAGE_LIST_JEVOIS_SOFTWARE}"

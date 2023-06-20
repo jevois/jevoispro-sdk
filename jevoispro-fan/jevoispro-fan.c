@@ -25,12 +25,13 @@
 #include <string.h>
 #include <signal.h>
 #include <syslog.h>
+#include <hailo/hailort.h>
 
 // Below TMIN (in millidegrees), fan is off (or running at very quiet speed); above TMAX it is fully on:
 #define TMIN 65000
 #define TMAX 85000
 
-// Was period 1M, min duty 100k but Howie's fan is very loud, so instead use period 100k, min duty 4250:
+// Was period 1M, min duty 100k but Howie's fan is very loud, so instead use period 100k, min duty 4300:
 #define PERIOD 100000
 #define DMAX PERIOD
 #define DMIN 4300
@@ -68,13 +69,26 @@ int readfile(char const * fname, int log)
 
 // ####################################################################################################
 // main function
-int main (int argc, char **argv)
+int main (int argc, char *argv[])
 {
   long temp, temp2; long duty; char dutystr[16]; int ret; int c;
-  float dpmin = 4.3F, dpmax = 100.0F;
+  float dpmin = 5.3F, dpmax = 100.0F; int has_hailo = 0;
+  hailo_chip_temperature_info_t hailotemp;
+  hailo_device hailodev;
   
   openlog("jevoispro-fan", LOG_PID, LOG_DAEMON);
 
+  // Detect if we have a hailo chip:
+  int fd = open("/sys/class/hailo_chardev/hailo0/device_id", O_RDONLY);
+  if (fd != -1)
+  {
+    close(fd);
+    hailo_pcie_device_info_t info; size_t numdev;
+    if (hailo_scan_pcie_devices(&info, 1, &numdev) == HAILO_SUCCESS &&
+        hailo_create_pcie_device(&info, &hailodev) == HAILO_SUCCESS)
+      has_hailo = 1;
+  }
+  
   // Parse command-line options:
   opterr = 0;
 
@@ -90,13 +104,14 @@ int main (int argc, char **argv)
     default: break;
     }
 
+  // Compute and sanitize all params:
   dmin = (long)(period * dpmin / 100.0F + 0.499F);
   dmax = (long)(period * dpmax / 100.0F + 0.499F);
   if (tmax <= tmin) tmax = tmin + 1000;
   if (dmax > period) dmax = period;
   if (dmax < 0) dmax = 0;
   if (dmin > dmax) dmin = dmax;
-  
+    
   syslog(LOG_NOTICE, "jevoispro-fan started: period=%ldns, duty=[%.1f%%..%.1f%%], temp=[%ldC..%ldC]",
          period, dpmin, dpmax, tmin / 1000, tmax / 1000);
 
@@ -121,9 +136,17 @@ int main (int argc, char **argv)
     temp2 = readfile("/sys/class/apex/apex_0/temp", 0); if (temp2 > temp) temp = temp2;
     temp2 = readfile("/sys/class/apex/apex_1/temp", 0); if (temp2 > temp) temp = temp2;
 
-    // Hailo does not report temperature but needs cooling, so go full blast if hailo is present:
-    int fd = open("/sys/class/hailo_chardev/hailo0/device_id", O_RDONLY);
-    if (fd != -1) { temp = 100000; close(fd); }
+    // Get hailo temp if present:
+    if (has_hailo)
+    {
+      if (hailo_get_chip_temperature(hailodev, &hailotemp) == HAILO_SUCCESS)
+      {
+        temp2 = hailotemp.ts0_temperature * 1000.0F;
+        if (temp2 > temp) temp = temp2;
+        temp2 = hailotemp.ts1_temperature * 1000.0F;
+        if (temp2 > temp) temp = temp2;
+      }
+    }
     
     if (temp < 25000) temp = 25000; else if (temp > 100000) temp = 100000;
 

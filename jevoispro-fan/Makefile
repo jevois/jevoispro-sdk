@@ -22,7 +22,7 @@
 .PHONY: all clean
 
 all: jevoispro-fan.c
-	gcc jevoispro-fan.c -o jevoispro-fan
+	gcc jevoispro-fan.c -o jevoispro-fan -lhailort
 
 clean:
 	-/bin/rm jevoispro-fan

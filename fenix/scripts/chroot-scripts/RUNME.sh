@@ -85,11 +85,14 @@ sudo pip3 install protobuf==3.19.4
 sudo pip3 install $mp
 rm $mp
 
+# install onnxruntime which may be useful for CPU deep nets:
+sudo pip3 install onnxruntime
+
 # Disable hostapd as it pollutes our logs:
 systemctl disable hostapd
 
 # Pre-install Hailo drivers (Note: hailort deb is already installed from jevois.usc.edu):
-hailo="4.8.1"
+hailo="4.13.0"
 hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
 wget http://jevois.org/pkg/${hrtwheel}
 sudo pip3 install ${hrtwheel}
@@ -149,9 +152,10 @@ systemctl set-default jevoispro.target
 # Clean up
 apt-get update
 apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
+apt -y install --reinstall ca-certificates
 apt-get -y clean
 apt-get -y autoclean
-#history -c
+history -c
 
 # Self-deleting
 rm $0
