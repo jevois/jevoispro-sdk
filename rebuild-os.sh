@@ -89,6 +89,12 @@ sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/lab
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
 
+# remove jevois includes and libs from jevoispro-sysroot, instead we will get them from /var/lib/jevoispro-build
+# which gets first installed by jevoispro-platform and then gets refreshed in case we recompile jevois:
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevoisbase
+sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
+
 # Write the version of this SDK, when compiling JeVois we will check it:
 echo $ver | sudo tee "${r}/jevoispro-sdk-version.txt"
 
@@ -127,12 +133,5 @@ fi
 img=`/bin/ls fenix/build/images/JVPRO_Ubuntu-xfce-focal_Linux-4.9_arm64_SD-USB*.img`
 imgname=`basename $img`
 sudo mv $img .
-
-
-# now remove include/jevois and libjevois from the local sysroot copy so they will not be selected when we locally
-# recompile our code:
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
-
 
 echo "ALL DONE: IMAGE TO FLASH TO SD: $imgname"
