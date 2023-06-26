@@ -58,6 +58,19 @@ sync
 # JeVois final fix:
 ####################################################################################################
 
+# Set default imgui window locations
+cat <<-EOF > /root/imgui.ini
+[Window][JeVois-Pro v1.19.0]
+Pos=920,358
+Size=941,639
+Collapsed=0
+
+[Window][pipeline:NPU:Detect:yolov7-tiny-NPU]
+Pos=24,159
+Size=464,877
+Collapsed=0
+EOF
+
 # Need to update protobuf if we want to run the latest mediapipe:
 #pbver="21.2"
 #wget https://github.com/protocolbuffers/protobuf/releases/download/v${pbver}/protoc-${pbver}-linux-aarch_64.zip
