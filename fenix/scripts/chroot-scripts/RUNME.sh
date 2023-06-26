@@ -166,6 +166,7 @@ systemctl set-default jevoispro.target
 apt-get update
 apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
 apt -y install --reinstall ca-certificates
+ssh-keygen -A # for problems with openssh-server not starting...
 apt-get -y clean
 apt-get -y autoclean
 history -c
