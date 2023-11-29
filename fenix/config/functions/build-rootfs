@@ -98,7 +98,7 @@ install_common()
 	[ -f $ROOTFS_TEMP/etc/rsyslog.conf ] && sed '/.*$KLogPermitNonKernelFacility.*/,// s/.*/#&/' -i $ROOTFS_TEMP/etc/rsyslog.conf
 
     # JEVOIS: disable hostapt as it pollutes syslog because it is not configured by default:
-	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload disable hostapt.service"'
+	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl --no-reload disable hostapd.service"'
 
 	# Premit root login via SSH for the first boot
 	sed -i 's/#\?PermitRootLogin .*/PermitRootLogin yes/' $ROOTFS_TEMP/etc/ssh/sshd_config
@@ -611,15 +611,6 @@ EOF
 		# ext4
 		rsync -aHWXh $rsync_progress $ROOTFS_TEMP/boot $ROOTFS
 	fi
-
-    # JEVOIS TODO: rsync /jevoispro
-    if [ "$INSTALL_TYPE" == "SD-USB" -a "${KHADAS_BOARD}" == "JVPRO" ]; then
-    	info_msg "Copying files to /jevoispro directory..."
-
-        info_msg "FIXME... TODO"
-		# something like: rsync -rLtWh --info=progress2,stats1 $ROOTFS_TEMP/jevoispro $ROOTFS
-
-    fi
 
 	if [[ -f $ROOTFS_TEMP/boot/env.txt ]]; then
 		sed -i s/rootdev=.*/rootdev=$rootfs_uuid/g $ROOTFS/boot/env.txt

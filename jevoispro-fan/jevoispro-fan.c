@@ -31,10 +31,10 @@
 #define TMIN 65000
 #define TMAX 85000
 
-// Was period 1M, min duty 100k but Howie's fan is very loud, so instead use period 100k, min duty 4300:
+// Was period 1M, min duty 100k but Howie's fan is very loud, so instead use period 100k, min duty 4500:
 #define PERIOD 100000
 #define DMAX PERIOD
-#define DMIN 4300
+#define DMIN 4500
 
 static long period = PERIOD, dmin = DMIN, dmax = DMAX, tmin = TMIN, tmax = TMAX;
 

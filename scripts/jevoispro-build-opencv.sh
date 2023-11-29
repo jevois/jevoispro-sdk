@@ -13,7 +13,7 @@ fi
 
 # OpenCV version to build:
 ma=4
-mi=7
+mi=8
 pa=0
 
 vino="2022.3" # release
@@ -22,6 +22,7 @@ vinobranch="releases/2022/3" # github branch
 # note: for vino 2021.4 use -DINF_ENGINE_RELEASE=${vino//./0}0000 \
 # note: for vino 2021.4.2 use -DINF_ENGINE_RELEASE=${vino//./0}00 \
 infrel=${vino//./0}0000
+#infrel=${vino//./0}00
 
 # Our deb package release number:
 pkgrel=1
@@ -350,8 +351,8 @@ if [ "X$REPLY" != "Xn" ]; then
     \
     -DWITH_OPENVINO=ON \
     -DOPENCV_DNN_OPENVINO=ON \
-    -DWITH_INF_ENGINE=ON \
     -DWITH_NGRAPH=ON \
+    -DWITH_INF_ENGINE=ON \
     -Dngraph_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
     -DInferenceEngine_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
     -DINF_ENGINE_RELEASE=${infrel} \

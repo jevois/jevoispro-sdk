@@ -8,7 +8,7 @@
 # Optional -deb argument also create a deb package that contains all the results.
 
 # These definitions are used to create the deb package only:
-ver="1.19.0"
+ver="1.20.0"
 gitbranch="master"
 pkgrel="1"
 uburel=`lsb_release -rs`
@@ -88,12 +88,6 @@ sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/doc/*
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/lab
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
-
-# remove jevois includes and libs from jevoispro-sysroot, instead we will get them from /var/lib/jevoispro-build
-# which gets first installed by jevoispro-platform and then gets refreshed in case we recompile jevois:
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevois
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/include/jevoisbase
-sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/usr/lib/libjevois*
 
 # Write the version of this SDK, when compiling JeVois we will check it:
 echo $ver | sudo tee "${r}/jevoispro-sdk-version.txt"

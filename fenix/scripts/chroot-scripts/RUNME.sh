@@ -19,6 +19,9 @@ USER_PASSWORD_ENCRYPTED=`perl -e 'printf("%s\n", crypt($ARGV[0], "password"))' "
 useradd -m -p "$USER_PASSWORD_ENCRYPTED" -s /bin/bash $USERNAME
 usermod -aG sudo,adm $USERNAME
 
+# Clean ssh keys
+rm -f /etc/ssh/ssh_host*
+
 # Add group
 DEFGROUPS="audio,video,disk,input,tty,root,users,games,dialout,cdrom,dip,plugdev,bluetooth,pulse-access,systemd-journal,netdev,staff,i2c"
 IFS=','
@@ -58,9 +61,12 @@ sync
 # JeVois final fix:
 ####################################################################################################
 
+# We do not want unattended upgrades as those could likely break our software:
+apt -y purge unattended-upgrades
+
 # Set default imgui window locations
 cat <<-EOF > /root/imgui.ini
-[Window][JeVois-Pro v1.19.0]
+[Window][JeVois-Pro v1.20.0]
 Pos=920,358
 Size=941,639
 Collapsed=0
@@ -97,6 +103,9 @@ sudo pip3 install dataclasses
 sudo pip3 install protobuf==3.19.4
 sudo pip3 install $mp
 rm $mp
+
+# openai whisper speech to text
+#sudo pip3 install -U openai-whisper
 
 # install onnxruntime which may be useful for CPU deep nets:
 sudo pip3 install onnxruntime
@@ -172,6 +181,10 @@ apt-get -y autoclean
 history -c
 
 /bin/rm -rf /jevois # not sure how that one got created in the first place...
+
+# Because /jevoispro will be a VFAT partition, symlinks are not allowed in there. Yet, at some point, ldconfig
+# (which we do not explicitly run, but likely it is in a postinst of some package) creates one for libonnxruntime.so:
+find /jevoispro -type l -delete
 
 # Self-deleting
 rm $0
