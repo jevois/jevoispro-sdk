@@ -1,28 +1,23 @@
 #!/bin/bash
 
-# Download, build, and pack opencv for jevois-pro, native or platform
-# USAGE: jevoispro-build-opencv.sh [aarch64|-y]
+# Download, build, and pack opencv for jevois-pro
+# USAGE: jevoispro-build-opencv.sh [-y]
 
-# Note: on platform, we do not install dependency packages, they should have been pre-installed when building the
-# platform OS
-
-if [ "X$1" = "Xaarch64" ]; then
-    cross=1
-    echo "----- Cross-compiling for $1 -----"
-fi
+set -e
 
 # OpenCV version to build:
 ma=4
-mi=8
+mi=9
 pa=0
 
-vino="2022.3" # release
+# Support for MyriadX ended with 2022.3.2 so we are stuck there...
+vino="2022.3.2" # release
 vinobranch="releases/2022/3" # github branch
 
 # note: for vino 2021.4 use -DINF_ENGINE_RELEASE=${vino//./0}0000 \
 # note: for vino 2021.4.2 use -DINF_ENGINE_RELEASE=${vino//./0}00 \
-infrel=${vino//./0}0000
-#infrel=${vino//./0}00
+vinodots="${vino//[^\.]}"
+if [ ${#vinodots} -eq 1 ]; then infrel=${vino//./0}0000 ; else infrel=${vino//./0}00 ; fi
 
 # Our deb package release number:
 pkgrel=1
@@ -30,21 +25,15 @@ pkgrel=1
 # Architecture and paths:
 libarch=`uname -p` # x86_64 or aarch64
 uburel=`lsb_release -rs`
-arch=`dpkg --print-architecture` # amd64 or aarch64
+arch=`dpkg --print-architecture` # amd64 or arm64
 ncpu=`grep -c processor /proc/cpuinfo`
 root=""
 
-job=""
-if [ $arch != "amd64" ]; then job="2"; fi
-
-if [ "X$cross" = "X1" ]; then
-    libarch="aarch64"
-    arch="aarch64"
-    root="/home/${USER}/jevois/software/jevoispro-sdk/jevoispro-sysroot"
-fi
+job="16"
+if [ $arch != "amd64" -a ! -f /.dockerenv ]; then job="4"; fi
 
 # NOTE: 4.6.0 disable OpenCL on host build as it leads to an undefined symbol in python??
-if [ $arch = "amd64" ]; then JVOPENCL=OFF; else JVOPENCL=ON; fi
+if [ $arch = "amd64" -a $mi -eq 6 ]; then JVOPENCL=OFF; else JVOPENCL=ON; fi
 
 if [ "x$1" = "x-y" ]; then usedef=1; else usedef=0; fi
 function question { if [ $usedef -eq 1 ]; then REPLY="y"; else read -p "JEVOIS: ${1}? [Y/n] "; fi }
@@ -52,45 +41,45 @@ function question { if [ $usedef -eq 1 ]; then REPLY="y"; else read -p "JEVOIS: 
 ####################################################################################################
 # Install boost first and then decide on python version:
 sudo apt -y install libboost-all-dev
-if [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python38.so" ]; then pyver="3.8";
+if [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python312.so" ]; then pyver="3.12";
+elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python38.so" ]; then pyver="3.8";
 elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python3-py37.so" ]; then pyver="3.7";
 elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python-py36.so" ]; then pyver="3.6";
 elif [ -f "${root}/usr/lib/${libarch}-linux-gnu/libboost_python-py35.so" ]; then pyver="3.5";
-else echo "Cannot find libboost_python py35, py36, py37 or 38 -- ABORT"; exit 5; fi
+else echo "Cannot find libboost_python py35, py36, py37, 38, or 312 -- ABORT"; exit 5; fi
 
 ####################################################################################################
 # Compiler packages and dependencies
 if [ ${uburel} = "18.04" -o ${uburel} = "19.04" ]; then
     gccver=8
     qt4lib="libqt4-dev"
-else
+elif [ ${uburel} = "20.04" ]; then
     gccver=10
     qt4lib="" # no more qt4 on 20.04; we already have qt5-default in the list below
+else
+    gccver=14
+    qt4lib="" # no more qt4
 fi
 
-packages=( build-essential python2.7-dev gcc-${gccver} g++-${gccver} gfortran-${gccver} cmake libboost-all-dev autoconf
-           libeigen3-dev libgtk2.0-dev libdc1394-22 libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev
+packages=( build-essential gcc-${gccver} g++-${gccver} gfortran-${gccver} cmake libboost-all-dev autoconf
+           libeigen3-dev libgtk2.0-dev libdc1394-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev
            libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev
-           libtbb2 libtbb-dev ${qt4lib} libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev
-           libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qt5-default python${pyver}-dev python3-numpy
-           python3-pip libgtk-3-dev libatlas-base-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev
-           libtesseract-dev tesseract-ocr-all libleptonica-dev liblapacke-dev libopenblas-dev libopenblas-openmp-dev
-           libavresample-dev pylint libopenjp2-7-dev libopenjpip7 libopenjp3d7 libopenjp2-tools libopenjp3d-tools
-           libcaffe-cpu-dev curl wget libssl-dev ca-certificates git pkg-config automake libtool shellcheck python
-           libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev 
+           libtbb-dev ${qt4lib} libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev
+           libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qtbase5-dev \
+           python${pyver}-dev python3-numpy python3-pip libgtk-3-dev liblapacke-dev libturbojpeg \
+           checkinstall protobuf-compiler libprotobuf-dev \
+           libtesseract-dev tesseract-ocr-all libleptonica-dev libopenblas-dev libopenblas-openmp-dev
+           pylint libopenjp2-7-dev libopenjpip7 libopenjp2-tools curl wget libssl-dev git pkg-config
+           automake libtool shellcheck libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0
+           gstreamer1.0-plugins-base libusb-1.0-0-dev 
            # for openvino:
-           clang-12 libclang-12-dev clang-format-9 ccache libssl-dev ca-certificates git-lfs libboost-regex-dev
-           libgtk2.0-dev pkg-config libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev libglib2.0-dev
-           libgtk2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev scons patchelf
+           clang libclang-dev clang-format ccache libssl-dev ca-certificates git-lfs libgtk2.0-dev pkg-config
+           libtool autoconf shellcheck libcairo2-dev libpango1.0-dev libglib2.0-dev
+           libgtk2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev scons patchelf
            lintian file gzip libpugixml-dev libva-dev python3-pip python3-venv python3-enchant python3-setuptools
-           libpython3-dev libgflags-dev zlib1g-dev libudev1 libusb-1.0-0 libusb-1.0-0-dev libtinfo5 git-lfs libjson-c4
-           libboost-filesystem1.71.0 libboost-program-options1.71.0 libenchant1c2a nlohmann-json3-dev )
-
-# openvino needs libcudnn8-dev libcutensor-dev which is installed from nvidia apt repo...
-
-# libopenjpip-dec-server libopenjpip-server libopenjpip-viewer
-
-# openvino uses gcc-multilib g++-multilib but this removes arm g++-10
+           libpython3-dev libgflags-dev zlib1g-dev libudev1 libusb-1.0-0 libusb-1.0-0-dev git-lfs
+           nlohmann-json3-dev python3-yaml python3-setuptools
+	       python3-wheel cython3 )
 
 # on platform, opencl headers conflict with aml-npu package, which also provides them:
 if [ $arch = "amd64" ]; then
@@ -100,30 +89,34 @@ fi
 ####################################################################################################
 question "Install/update packages"
 if [ "X$REPLY" != "Xn" ]; then
-
-    # Install packages if we are compiling natively
-    if [ "X$cross" != "X1" ]; then
-        
-        failed=""
-        for pack in "${packages[@]}"; do
+    set +e
+    
+    # Install packages unless they are already installed:
+    failed=""
+    for pack in "${packages[@]}"; do
+        if `dpkg --list | grep -q $pack`; then
+            echo "$pack already installed"
+        else
             sudo apt-get --assume-yes install $pack
             if [ $? -ne 0 ]; then failed="$failed $pack"; fi
-        done
-        
-        if [ "X$failed" != "X" ]; then
-            echo
-            echo
-            echo "### WARNING: Some packages failed to install #####" 
-            echo
-            echo "Install failed for: $failed"
-            echo
-            echo
-            echo "This will likely be a problem for the rest of this script."
-            echo "You should try to install them using synaptic or other."
-            read -p "Abort this script now [Y/n]? "
-            if [ "X$REPLY" != "Xn" ]; then exit 2; fi
         fi
+    done
+    
+    if [ "X$failed" != "X" ]; then
+        echo
+        echo
+        echo "### WARNING: Some packages failed to install #####" 
+        echo
+        echo "Install failed for: $failed"
+        echo
+        echo
+        echo "This will likely be a problem for the rest of this script."
+        echo "You should try to install them using synaptic or other."
+        read -p "Abort this script now [Y/n]? "
+        if [ "X$REPLY" != "Xn" ]; then exit 2; fi
     fi
+
+    set -e
 fi
 
 ####################################################################################################
@@ -149,53 +142,105 @@ fi
 
 ####################################################################################################
 # Install the desired compiler as default:
-if [ "X$cross" != "X1" ]; then
-    sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${gccver} 100 \
-         --slave /usr/bin/g++ g++ /usr/bin/g++-${gccver} \
-         --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${gccver}
-    sudo update-alternatives --set gcc /usr/bin/gcc-${gccver}
-fi
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${gccver} 100 \
+     --slave /usr/bin/g++ g++ /usr/bin/g++-${gccver} \
+     --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${gccver}
+sudo update-alternatives --set gcc /usr/bin/gcc-${gccver}
 
 ####################################################################################################
 # install openvino
 question "Compile and install OpenVino"
 if [ "X$REPLY" != "Xn" ]; then
 
-    sudo rm -rf openvino-${vino} openvino
-    sudo rm -rf openvino_contrib-${vino} openvino_contrib
-    sudo rm -rf /usr/local/share/ade
     sudo rm -rf ${root}/usr/share/jevoispro-openvino-${vino}
 
-    # Get openvino_contrib:
-    git clone --recursive --recurse-submodules --branch ${vinobranch} https://github.com/openvinotoolkit/openvino_contrib.git
-    mv openvino_contrib openvino_contrib-${vino}
+    # We may re-use already downloaded tree, if present, only when not forcing -y option:
+    nuke=1
+    if [ -d openvino-${vino} ]; then
+        question "Nuke existing OpenVino source tree"
+        if [ "X$REPLY" != "Xn" ]; then
+            nuke=1
+        else
+            nuke=0
+            sudo rm -rf openvino-${vino}/build
+        fi
+    fi
     
-    # Get openvino:
-    git clone --recursive --recurse-submodules --branch ${vinobranch} https://github.com/openvinotoolkit/openvino.git
-    mv openvino openvino-${vino}
-
-    cd openvino-${vino}
+    if [ "X$nuke" = "X1" ]; then
+        sudo rm -rf openvino-${vino} openvino
+        sudo rm -rf openvino_contrib-${vino} openvino_contrib
+        
+        # Get openvino_contrib:
+        git clone --recursive --recurse-submodules --branch ${vinobranch} \
+            https://github.com/openvinotoolkit/openvino_contrib.git
+        mv openvino_contrib openvino_contrib-${vino}
+        
+        # Get openvino:
+        git clone --recursive --recurse-submodules --branch ${vinobranch} \
+            https://github.com/openvinotoolkit/openvino.git
+        mv openvino openvino-${vino}
+    
+        cd openvino-${vino}
+        
+        # Patch it up for compatibility with ubuntu noble:
+        sed -i '/#pragma once/a #include <cstdint>' src/common/util/include/openvino/util/file_util.hpp
+        sed -i '/#pragma once/a #include <cstdint>' src/common/preprocessing/ie_preprocess_gapi_kernels.hpp
+        sed -i '/#pragma once/a #include <cstdint>' src/common/itt/include/openvino/itt.hpp
+        
+        sed -i '/#include <array>/a #include <cstdint>' \
+            ../openvino_contrib-${vino}/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/utils/misc/Utility.h
+        sed -i '/#include <array>/a #include <cstdint>' \
+            thirdparty/ade/sources/ade/include/ade/typed_graph.hpp
+        sed -i '/#include <array>/a #include <cstdint>' \
+            ../openvino_contrib-2022.3.2/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/Strides.h
+        sed -i '/#include <array>/a #include <cstdint>' \
+            src/frontends/onnx/onnx_common/src/onnx_model_validator.cpp
+        sed -i '/#include <string>/a #include <cstdint>' \
+            src/plugins/intel_gpu/thirdparty/onednn_gpu/src/gpu/jit/gemm/gen_gemm_kernel_common.hpp
+        sed -i '/#include <string>/a #include <cstdint>' \
+            src/plugins/intel_gpu/src/kernel_selector/jitter.h
+        sed -i '/#include <string>/a #include <cstdint>' \
+            src/plugins/intel_gpu/include/intel_gpu/runtime/device_info.hpp
+        
+        sed -i '238i using JitConstant::GetDefinitions;' \
+            src/plugins/intel_gpu/src/kernel_selector/jitter.cpp
+        
+        sed -i '264i using primitive_impl::execute;' \
+            src/plugins/intel_gpu/src/graph/impls/cpu/proposal.cpp
+        
+        sed -i '71i using WeightBiasKernelBase::GetJitConstants;' \
+            src/plugins/intel_gpu/src/kernel_selector/kernels/deconvolution/deconvolution_kernel_base.h
+        
+        sed -i 's/return std::move/return /g' \
+            src/inference/include/ie/ie_blob.h
+        
+        sed -i 's/ -1/ 255/g' thirdparty/ocv/opencv_hal_neon.hpp
+        
+        sed -i 's/device.getInfo<CL_DEVICE_PLATFORM>()/device.getInfo<CL_DEVICE_PLATFORM>()()/g' \
+            src/plugins/intel_gpu/src/runtime/ocl/ocl_device_detector.cpp
+    else
+        cd openvino-${vino}
+    fi        
 
     # Build process is quite different on host vs platform:
     if [ $arch = "amd64" ]; then
     
         # Install dependencies
-        ./install_build_dependencies.sh -y
-        pip3 install -r src/bindings/python/wheel/requirements-dev.txt
-        pip3 install -r cmake/developer_package/ncc_naming_style/requirements_dev.txt
+        sudo ./install_build_dependencies.sh -y
+        ##sudo pip3 install -r src/bindings/python/wheel/requirements-dev.txt
+        ##sudo pip3 install -r cmake/developer_package/ncc_naming_style/requirements_dev.txt
 
-        export CUDNN_PATH=/usr/local/cuda
-        VINOCUDA="-DCMAKE_CUDA_COMPILER=/usr/local/cuda-11/bin/nvcc"
-
-        # Ok, build it:
+        # Ok, build it. Note, on x86_64, we do not compile openvino_contrib anymore because it requires obsoleted nvidia
+        # packages that cannot install on ubuntu noble:
         mkdir build && cd build
 
         cmake -DCMAKE_BUILD_TYPE=Release \
-              -DIE_EXTRA_MODULES=../openvino_contrib-${vino}/modules -DBUILD_java_api=OFF \
+              -DBUILD_java_api=OFF \
               -DENABLE_OPENCV=ON -DENABLE_SAMPLES=OFF -DENABLE_TESTS=OFF -DENABLE_PYTHON=OFF \
               -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
               -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-openvino-${vino} \
-              -DCPACK_SET_DESTDIR=ON ${VINOCUDA} \
+              -DCPACK_SET_DESTDIR=ON \
+	          -Wno-dev \
               ..
     
         make -j ${job}
@@ -214,11 +259,10 @@ if [ "X$REPLY" != "Xn" ]; then
               ..
         
         make -j ${job}
-        #cmake --build . --parallel 
     fi
     
-    sudo cmake --install . --prefix /usr/share/jevoispro-openvino-${vino}
-
+    sudo make install
+    
     # Description
     cat > description-pak <<EOF
 OpenVino ${vino} configured for use with JeVois-Pro smart machine vision
@@ -228,9 +272,7 @@ EOF
     cat > postinstall-pak <<EOF
 #!/bin/sh
 f=/etc/ld.so.conf.d/jevoispro-openvino.conf
-echo "/usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}" >> \${f}
-#echo "/usr/share/jevoispro-openvino-${vino}/runtime/3rdparty/tbb/lib" >> \${f}
-
+echo "/usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}" > \${f}
 ldconfig
 EOF
     chmod a+x postinstall-pak
@@ -242,14 +284,7 @@ ldconfig
 EOF
     chmod a+x postremove-pak
 
-    if [ -d ../inference-engine/temp/tbb_yocto ]; then
-        # needed by checkinstall and make install on aarch64
-        touch ../inference-engine/temp/tbb_yocto/LICENSE
-        #touch ../inference-engine/temp/tbb_yocto/COPYING
-        #touch ../inference-engine/temp/tbb_yocto/INSTALL
-        #touch ../inference-engine/temp/tbb_yocto/README
-    fi
-
+    # Pack it up:
     sudo checkinstall \
          --type debian \
          --pkgname jevoispro-openvino \
@@ -269,12 +304,10 @@ EOF
          --pkgrelease "${pkgrel}ubuntu${uburel}" \
          --requires "${pkgdeps}"
 
-    cd ../..
+    # run the postinstall so that opencv can find the openvino libs when we compile it:
+    sudo ./postinstall-pak
 
-    #curl https://apt.repos.intel.com/openvino/2021/GPG-PUB-KEY-INTEL-OPENVINO-2021 | sudo apt-key add -
-    #echo "deb https://apt.repos.intel.com/openvino/2021 all main" | sudo tee /etc/apt/sources.list.d/intel-openvino-2021.list
-    #sudo apt update
-    #sudo apt install intel-openvino-runtime-ubuntu20-2021.2.200
+    cd ../..
 fi
 
 ####################################################################################################
@@ -310,8 +343,6 @@ if [ "X$REPLY" != "Xn" ]; then
     mkdir build
     cd build
 
-    # this messes things up?    
-    
     opts="-DCMAKE_BUILD_TYPE=RELEASE \
     -DCMAKE_INSTALL_PREFIX=${root}/usr/share/jevoispro-opencv-${ver} \
     -DCPACK_PACKAGING_PREFIX=${root}/usr/share/jevoispro-opencv-${ver} \
@@ -319,7 +350,6 @@ if [ "X$REPLY" != "Xn" ]; then
     -DOPENCV_VCSVERSION=\"${ver}-${pkgrel}ubuntu${uburel}\" \
     -DPYTHON_DEFAULT_EXECUTABLE=/usr/bin/python${pyver} \
     -DPYTHON_EXECUTABLE=/usr/bin/python${pyver} \
-    -DPYTHON2_EXECUTABLE=/usr/bin/python2.7 \
     -DBUILD_OPENCV_PYTHON3=ON \
     \
     -DENABLE_FAST_MATH=1 \
@@ -372,44 +402,17 @@ if [ "X$REPLY" != "Xn" ]; then
     -DCPACK_BINARY_STGZ=OFF \
     -DCPACK_BINARY_TZ=OFF \
     -DCPACK_BINARY_TGZ=OFF"
-# May want to check this: WITH_PLAIDML, WITH_QT, WITH_OPENGL (likely no, we have opengl-es)
+    # May want to check this: WITH_PLAIDML, WITH_QT, WITH_OPENGL (likely no, we have opengl-es)
 
-
-    # Use the opencv cross-compile options if cross-compiling:
-    if [ "X$cross" = "X1" ]; then
-        opts="${opts} \
-          -DCMAKE_SYSTEM_NAME=Linux \
-          -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-          -DGNU_MACHINE=aarch64-linux-gnu \
-          -DCMAKE_SYSROOT=${root} \
-          -DFFMPEG_ROOT=${root}/usr \
-          -DCMAKE_FIND_ROOT_PATH=${root} \
-          -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-          -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-          -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-          -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-          -DCMAKE_INCLUDE_PATH=${root}/usr/include;${root}/usr/lib/aarch64-linux-gnu/glib-2.0/include/ \
-          -DCMAKE_LIBRARY_PATH=${root}/usr/lib \
-          -DGCC_COMPILER_VERSION=${gccver} \
-          -DPYTHON2_INCLUDE_PATH=${root}/usr/include/python2.7 \
-          -DPYTHON2_LIBRARIES=${root}/usr/lib/python2.7 \
-          -DPYTHON3_INCLUDE_PATH=${root}/usr/include/python${pyver} \
-          -DPYTHON3_LIBRARIES=${root}/usr/lib/python${pyver} \
-          -DPYTHON3_NUMPY_INCLUDE_PATH=${root}/usr/lib/python3/dist-packages/numpy/core/include \
-          -DCMAKE_TOOLCHAIN_FILE=../opencv-${ver}/platforms/linux/aarch64-gnu.toolchain.cmake"
-
-        LD_LIBRARY_PATH="${root}/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH}" \
-                       PKG_CONFIG_PATH=${root}/usr/lib/aarch64-linux-gnu/pkgconfig \
-                       PKG_CONFIG_LIBDIR=${root}/usr/lib/aarch64-linux-gnu \
-                       cmake ${opts} ..
-    else
-        cmake ${opts} ..
-    fi
-
-
+    cmake ${opts} ..
 
     # build
     make -j ${job}
+    make doc
+    
+    # Install it for the next steps (compiling jevois software)
+    sudo make install
+    sudo mkdir -p /usr/share/jevoispro-opencv-${ver}/share/licenses/opencv4
     
     # Description
     cat > description-pak <<EOF
@@ -421,9 +424,15 @@ EOF
 #!/bin/sh
 f=/etc/ld.so.conf.d/jevoispro-opencv.conf
 echo "/usr/share/jevoispro-opencv-${ver}/lib" > \${f}
-echo "/usr/share/jevoispro-opencv-${ver}/lib/python${pyver}/site-packages/cv2/python-${pyver}" >> \${f}
+
+p="/usr/share/jevoispro-opencv-${ver}/lib/python${pyver}/dist-packages/cv2/python-${pyver}"
+if [ -d "\${p}" ]; then echo "\${p}" >> \${f}; fi
+
+p="/usr/share/jevoispro-opencv-${ver}/lib/python${pyver}/site-packages/cv2/python-${pyver}"
+if [ -d "\${p}" ]; then echo "\${p}" >> \${f}; fi
 
 ldconfig
+
 # Fix compilation error with libjpeg-turbo8
 if [ ! -f /usr/lib/${libarch}-linux-gnu/libturbojpeg.so ]; then
     sudo ln -s /usr/lib/${libarch}-linux-gnu/libturbojpeg.so.0.?.0 /usr/lib/${libarch}-linux-gnu/libturbojpeg.so
@@ -457,18 +466,16 @@ EOF
          --pkgrelease "${pkgrel}ubuntu${uburel}" \
          --requires "${pkgdeps}"
 
-    question "Install OpenCv"
-    if [ "X$REPLY" != "Xn" ]; then
-        # Install it for the next steps (compiling jevois software)
-        sudo make install
+    if [ -d ~/jevois/software/jevois/Contrib/npu/include/ ]; then
+        question "Update jevois/Contrib/npu with TIM-VX installed here"
+        if [ "X$REPLY" != "Xn" ]; then
+            /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/include/* \
+                    ~/jevois/software/jevois/Contrib/npu/include/
+            /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/lib \
+                    ~/jevois/software/jevois/Contrib/npu/x86_64_linux/    
+        fi
     fi
 
-    question "Update jevois/Contrib/npu with TIM-VX installed here"
-    if [ "X$REPLY" != "Xn" ]; then
-        /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/include/* \
-                ~/jevois/software/jevois/Contrib/npu/include/
-        /bin/cp -ar 3rdparty/libtim-vx/TIM-VX-*/prebuilt-sdk/x86_64_linux/lib \
-                ~/jevois/software/jevois/Contrib/npu/x86_64_linux/    
-    fi
+    # run the postinstall so that jevois can find opencv:
+    sudo ./postinstall-pak
 fi
-

@@ -66,7 +66,7 @@ apt -y purge unattended-upgrades
 
 # Set default imgui window locations
 cat <<-EOF > /root/imgui.ini
-[Window][JeVois-Pro v1.20.0]
+[Window][JeVois-Pro v1.21.0]
 Pos=920,358
 Size=941,639
 Collapsed=0
@@ -77,49 +77,53 @@ Size=464,877
 Collapsed=0
 EOF
 
+# Install mali gpu drivers and others from jevois.usc.edu
+apt -y install linux-gpu-mali-fbdev aml-npu libamvenc libmultienc wiringpi python3-wiringpi \
+    glmark2-es2-fbdev mali-examples-aml tengine-libs libplayer-aml libcec \
+    encoder-libs-aml
+
 # Need to update protobuf if we want to run the latest mediapipe:
 #pbver="21.2"
 #wget https://github.com/protocolbuffers/protobuf/releases/download/v${pbver}/protoc-${pbver}-linux-aarch_64.zip
 #unzip protoc-${pbver}-linux-aarch_64.zip -d /usr/local
 #/bin/rm protoc-${pbver}-linux-aarch_64.zip
 
-# may be needed by mediapipe? or maybe it will find the jevois version already...
-#ocvc="opencv_contrib_python-4.5.2.52-cp38-cp38-linux_aarch64.whl"
-#wget http://jevois.org/pkg/$ocvc
-#sudo pip3 install $ocvc
-#rm $ocvc
-
+if false; then
 #mp="mediapipe-0.8-cp38-none-linux_aarch64.whl" # version that shipped with jevois < 1.18
+######## JEVOIS NOBLE: need a cp312 version...
 mp=mediapipe-0.8-cp38-cp38-linux_aarch64.whl # works with jevois 1.18, objectron segfaults, no selfie
 #mp="mediapipe-0.8.10.2-cp38-cp38-linux_aarch64.whl" # works but twice slower...
 wget http://jevois.org/pkg/$mp
-sudo pip3 install pip --upgrade
-sudo pip3 install numpy --upgrade
-sudo pip3 install testresources
-sudo pip3 install setuptools --upgrade
-sudo pip3 install cpython
-sudo pip3 install pillow
-sudo pip3 install dataclasses
-sudo pip3 install protobuf==3.19.4
-sudo pip3 install $mp
+pipx install pip --upgrade
+pipx install numpy --upgrade
+pipx install testresources
+pipx install setuptools --upgrade
+pipx install cpython
+pipx install pillow
+pipx install dataclasses
+pipx install protobuf==3.19.4
+pipx install $mp
 rm $mp
+fi
 
 # openai whisper speech to text
-#sudo pip3 install -U openai-whisper
+#pipx install -U openai-whisper
 
 # install onnxruntime which may be useful for CPU deep nets:
-sudo pip3 install onnxruntime
+pipx install onnxruntime
 
 # Disable hostapd as it pollutes our logs:
 systemctl disable hostapd
 
 # Pre-install Hailo drivers (Note: hailort deb is already installed from jevois.usc.edu):
-hailo="4.13.0"
-hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
-wget http://jevois.org/pkg/${hrtwheel}
-sudo pip3 install ${hrtwheel}
-/bin/rm ${hrtwheel}
-sudo pip3 install numpy --upgrade # hailo just downgraded numpy, try to upgrade it back...
+hailo="4.17.0"
+
+# JEVOIS: NEED TO WAIT UNTIL CP312 available...
+#hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
+#wget http://jevois.org/pkg/${hrtwheel}
+#pipx install ${hrtwheel}
+#/bin/rm ${hrtwheel}
+#pipx install numpy --upgrade # hailo just downgraded numpy, try to upgrade it back...
 
 # Kernel to use for dkms and Hailo PCIe driver:
 export KVER="4.9.241"
@@ -158,26 +162,27 @@ ARCH=arm64 dkms add -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms build -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms install -k ${KVER} -m 8812au -v 4.2.3
 
-# tim-vx and galcore NPU driver (see https://github.com/opencv/opencv/wiki/TIM-VX-Backend-For-Running-OpenCV-On-NPU):
-#mkdir /opt
-#cd /opt
-#wget https://github.com/VeriSilicon/TIM-VX/releases/download/v1.1.34.fix/aarch64_A311D_6.4.8.tgz
-#tar xvf aarch64_A311D_6.4.8.tgz
-#echo "export VIVANTE_SDK_DIR=/opt/aarch64_A311D_6.4.8" >> /root/.bashrc
-#/bin/cp /opt/aarch64_A311D_6.4.8/lib/galcore.ko /usr/lib/modules/4.9.241/kernel/drivers/amlogic/npu/galcore.ko
-#/bin/cp -a /opt/aarch64_A311D_6.4.8/lib/* /usr/lib/
-#/bin/rm /usr/lib/galcore.ko
-
 # Boot into jevois GUI by default:
-systemctl set-default jevoispro.target
+if [ -f /usr/bin/jevoispro.sh ]; then
+   systemctl set-default jevoispro.target
+fi
 
-# Clean up
-apt-get update
-apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
+# Update everything
+pipx upgrade-all
+apt update
+apt -y upgrade # upgrade NPU and GPU packages from jevois repo
 apt -y install --reinstall ca-certificates
 ssh-keygen -A # for problems with openssh-server not starting...
-apt-get -y clean
-apt-get -y autoclean
+
+# Install unsnapped firefox
+ff='firefox_126.0+build2-0ubuntu0.24.04.1~mt1_arm64.deb'
+wget "http://jevois.org/pkg/${ff}"
+dpkg -i "${ff}"
+rm "${ff}"
+
+# Clean up
+apt -y clean
+apt -y autoclean
 history -c
 
 /bin/rm -rf /jevois # not sure how that one got created in the first place...

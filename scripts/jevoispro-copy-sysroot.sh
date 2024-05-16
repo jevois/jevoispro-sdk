@@ -7,9 +7,15 @@ if [ "X${r}" = "X" ]; then r="/usr/share/jevoispro-sdk"; fi
 echo "Using JeVoisPro SDK root: ${r}"
 if [ ! -d "fenix" ]; then echo "Cannot find fenix/ -- ABORT"; exit 2; fi
 
-bdir="fenix/build/rootfs-jevois/rootfs-JVPRO-focal-xfce/"
-if [ ! -d "$bdir" ]; then echo "Cannot find $bdir -- you need to run rebuild-os.sh first -- ABORT"; exit 3; fi
-
+bdir="fenix/build/rootfs-jevois/rootfs-JVPRO-noble-xfce/"
+if [ ! -d "$bdir" ]; then
+    bdir="fenix/build/rootfs-jevois/rootfs-JVPRO-focal-xfce/"
+    if [ ! -d "$bdir" ]; then
+        echo "Cannot find fenix/build/rootfs-jevois/rootfs-JVPRO-[focal|noble]-xfce/ -- run rebuild-os.sh -- ABORT";
+        exit 3
+    fi
+fi
+    
 echo "Nuke old jevoispro-sysroot ..."
 if [ ! -d "${r}" ]; then sudo mkdir -p "${r}"; fi
 sr="${r}/jevoispro-sysroot"

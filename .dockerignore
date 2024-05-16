@@ -1,0 +1,6 @@
+.git
+.gitignore
+*.deb
+*.img
+*.zip
+*.whl

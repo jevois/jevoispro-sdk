@@ -116,3 +116,8 @@ build_updater_deb() {
 	rm -rf ${pkgdir}.deb
 	rm -rf $pkgdir
 }
+
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:

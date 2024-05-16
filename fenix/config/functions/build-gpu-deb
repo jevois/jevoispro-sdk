@@ -3,6 +3,9 @@
 
 build_gpu_deb() {
 
+    # JEVOIS: we will just install prebuilt package from jevois.usc.edu
+    return
+    
 	if [ -z "$GPU_MODEL" ]; then
 		return
 	fi
@@ -257,3 +260,8 @@ build_gpu_deb() {
 		rm -rf $pkgdir_dev
 	fi
 }
+
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:

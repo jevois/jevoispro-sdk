@@ -228,10 +228,16 @@ INFO="${GREEN}Info:${ENDCOLOR}"
 
 ################################### Packages ############################################
 # Base system dependencies
-DEBOOTSTRAP_LIST="locales gnupg ifupdown apt-utils apt-transport-https ca-certificates bzip2 console-setup \
-	cpio cron dbus init initramfs-tools iputils-ping isc-dhcp-client kmod less libpam-systemd linux-base \
-	logrotate netbase netcat-openbsd systemd sudo ucf udev whiptail wireless-regdb crda dmsetup \
-	rsync tzdata rng-tools fdisk curl"
+DEBOOTSTRAP_LIST="locales gnupg apt-utils ca-certificates bzip2 console-setup \
+	cpio cron dbus init initramfs-tools iputils-ping kmod less linux-base \
+	logrotate netbase netcat-openbsd sudo ucf udev whiptail wireless-regdb dmsetup \
+	rsync tzdata fdisk curl libpam-systemd systemd ifupdown "
+    
+# JEVOIS: remove some packages for noble:
+[[ $DISTRIB_RELEASE != noble ]] && DEBOOTSTRAP_LIST+=" rng-tools crda apt-transport-https isc-dhcp-client"
+
+# JEVOIS: add some packages for noble:
+[[ $DISTRIB_RELEASE == noble ]] && DEBOOTSTRAP_LIST+=" rng-tools-debian systemd-resolved systemd-sysv systemd-dev mawk libc6 libcrypt1"
 
 if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
 	DEBOOTSTRAP_LIST+=" libgtk2.0-bin"
@@ -244,7 +250,10 @@ DEBOOTSTRAP_LIST=$(echo $DEBOOTSTRAP_LIST | sed -e 's,\\[trn],,g')
 # Essential packages
 PACKAGE_LIST="bc cpufrequtils device-tree-compiler fping fake-hwclock psmisc chrony parted dialog \
 	ncurses-term sysfsutils toilet figlet u-boot-tools usbutils openssh-server nocache debconf-utils \
-	python3-apt make gcc libc6-dev plymouth plymouth-themes"
+	python3-apt make gcc libc6-dev plymouth plymouth-themes rng-tools"
+
+# JEVOIS: add some packages for noble:
+##[[ $DISTRIB_RELEASE == noble ]] && PACKAGE_LIST+=" awk libc6 libcrypt1"
 
 # Non-essential packages
 PACKAGE_LIST_ADDITIONAL="network-manager wireless-tools lsof htop mmc-utils wget nano net-tools \
@@ -259,11 +268,11 @@ if [[ "$DISTRIB_TYPE" != "minimal" ]]; then
 		libxcb1 html2text automake libwrap0-dev libnl-3-dev libnl-genl-3-dev \
 		keyboard-configuration rsyslog"
 
-	PACKAGE_LIST_ADDITIONAL+=" alsa-utils btrfs-progs dosfstools hddtemp iotop stress sysbench screen \
+	PACKAGE_LIST_ADDITIONAL+=" alsa-utils btrfs-progs dosfstools iotop stress sysbench screen \
 		ntfs-3g vim pciutils evtest pv libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude \
 		dnsutils f3 haveged hdparm rfkill vlan bash-completion hostapd git ethtool unzip ifenslave lirc \
 		iperf3 software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping \
-		bluetooth bluez bluez-tools watchdog i2c-tools qrencode clinfo ocl-icd-libopencl1 libatlas3-base \
+		bluetooth bluez bluez-tools watchdog i2c-tools qrencode clinfo ocl-icd-libopencl1 \
 		p7zip p7zip-full lrzip lzip lzop ncompress unar zstd edid-decode libgtk-3-0 dnsmasq-base ppp \
 		modemmanager mobile-broadband-provider-info zlib1g-dev"
 fi
@@ -271,10 +280,10 @@ fi
 PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils xterm thunar-volman \
 	network-manager-gnome network-manager-openvpn-gnome gnome-keyring gcr libgck-1-0 p11-kit pasystray pavucontrol pulseaudio \
 	pavumeter pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri gparted synaptic apt-xapian-index \
-	policykit-1 profile-sync-daemon gnome-orca numix-gtk-theme gnome-system-tools lightdm lightdm-gtk-greeter gufw yad zenity guvcview onboard"
+	policykit-1 profile-sync-daemon numix-gtk-theme gnome-system-tools lightdm lightdm-gtk-greeter gufw yad zenity guvcview onboard"
 
 PACKAGE_LIST_OFFICE="gedit galculator hexchat mpv gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf \
-	thunderbird system-config-printer-common system-config-printer paprefs dbus-x11 tango-icon-theme libreoffice libreoffice-style-tango fbi \
+	system-config-printer-common system-config-printer paprefs dbus-x11 tango-icon-theme fbi \
 	cups-pk-helper cups geany atril xarchiver meld remmina kazam avahi-daemon transmission"
 
 PACKAGE_LIST_XSERVER="libunwind8 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xf86dri0 libxcb-xkb1 libxcb-xv0 \
@@ -291,43 +300,46 @@ PACKAGE_LIST_QT="libqt5opengl5 libqt5qml5 libqt5quick5 libqt5widgets5 libqt5gui5
 
 # Packages to compile OpenCV customized for JeVois.
 
-PACKAGE_LIST_JEVOIS_COMPILE_OPENCV="build-essential gcc-10 g++-10 gfortran-10 python2.7-dev cmake libboost-all-dev \
-    autoconf libeigen3-dev libgtk2.0-dev libdc1394-22 libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev \
+PACKAGE_LIST_JEVOIS_COMPILE_OPENCV="build-essential gcc g++ gfortran cmake libboost-all-dev \
+    autoconf libeigen3-dev libgtk2.0-dev libdc1394-dev libjpeg-dev libpng-dev libtiff5-dev \
     libavcodec-dev libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-    libv4l-dev libtbb2 libtbb-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev \
-    libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qt5-default python3-dev python3-numpy \
-    python3-pip libgtk-3-dev libatlas-base-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
-    libtesseract-dev tesseract-ocr-all libleptonica-dev liblapacke-dev libavresample-dev qt5-default \
-    libopenblas-dev libopenblas-openmp-dev pylint libopenjp2-7-dev libopenjpip7 libopenjp3d7 libopenjp2-tools \
-    libopenjp3d-tools libcaffe-cpu-dev gdb dkms libssl-dev ca-certificates git-lfs libboost-regex-dev \
-    libgtk2.0-dev pkg-config unzip automake libtool autoconf shellcheck python libcairo2-dev libpango1.0-dev \
-    libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenblas-dev"
+    libv4l-dev libtbb-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev \
+    libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qtbase5-dev python3-dev python3-numpy \
+    python3-pip 2to3 libgtk-3-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
+    libtesseract-dev tesseract-ocr-all libleptonica-dev libopenblas-dev liblapacke-dev \
+    pylint libopenjp2-7-dev libopenjpip7 libopenjp2-tools \
+    gdb dkms libssl-dev git-lfs \
+    libgtk2.0-dev pkg-config unzip automake libtool autoconf shellcheck libcairo2-dev libpango1.0-dev \
+    libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev"
 
 # libqt4-dev
 
 # Packages to compile JeVois core software.
 PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf libeigen3-dev libgtk2.0-dev \
-    libdc1394-22 libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev \
-    libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb2 libtbb-dev \
+    libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev \
+    libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb-dev \
     libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev \
-    libxvidcore-dev x264 v4l-utils unzip qt5-default python3-numpy python3-pip libgtk-3-dev libatlas-base-dev \
+    libxvidcore-dev x264 v4l-utils unzip python3-numpy python3-pip libgtk-3-dev \
     libturbojpeg checkinstall protobuf-compiler libprotobuf-dev libprotoc-dev libtesseract-dev tesseract-ocr-all \
     libleptonica-dev checkinstall git build-essential cmake mercurial doxygen-gui graphviz libboost-all-dev \
-    libjpeg-turbo8-dev autoconf libeigen3-dev screen gawk u-boot-tools libgtk2.0-dev pkg-config libdc1394-22 \
-    libdc1394-22-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev libxine2-dev \
-    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb2 libtbb-dev libfaac-dev \
-    libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev libxvidcore-dev x264 \
-    v4l-utils unzip qt5-default python3-dev libgtk-3-dev libatlas-base-dev libturbojpeg libgles2-mesa \
-    libgles2-mesa-dev ncftp flex libturbojpeg-dev u-boot-tools dpkg-dev flex curl wput libdmtx-dev qt5-default \
-    subversion python3-scipy emacs tree \
+    libjpeg-turbo8-dev autoconf libeigen3-dev screen gawk u-boot-tools libgtk2.0-dev pkg-config \
+    libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev libxine2-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libfaac-dev \
+    libmp3lame-dev libtheora-dev libvorbis-dev libxvidcore-dev x264 fatresize \
+    v4l-utils unzip python3-dev libgtk-3-dev libturbojpeg libgles2-mesa \
+    libgles2-mesa-dev ncftp flex libturbojpeg-dev u-boot-tools dpkg-dev flex curl wput libdmtx-dev \
+    subversion python3-scipy emacs tree python-dev-is-python3 \
     libflac-dev libogg-dev libvorbis-dev libopenal-dev libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev \
-    libglm-dev libusb-dev libsdl2-dev sysstat strace"
+    libglm-dev libusb-dev libsdl2-dev sysstat strace libsdl2-dev libglm-dev libx11-dev python3-full pipx"
 
-PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev \
-     python3-pil python3-tflite-runtime python3-pycoral pycoral-examples git hailort jevoispro-fan ffmpeg"
+# Baseline jevois support software: openvino, opencv, hailo, coral, etc:
+PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev git hailort jevoispro-fan ffmpeg"
+
+# Google Coral TPU in python:
+#PACKAGE_LIST_JEVOIS_SOFTWARE+="python3-pil python3-tflite-runtime python3-pycoral pycoral-examples"
 
 # Pre-install jevois and jevoisbase: (comment out when switching to a new version):
-PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform"
+##PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform"
 
 PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACKAGE_LIST_JEVOIS_COMPILE} \
     ${PACKAGE_LIST_JEVOIS_SOFTWARE}"
@@ -335,7 +347,7 @@ PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACK
 case $DISTRIB_TYPE in
 	xfce)
 		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_OFFICE"
-		PACKAGE_LIST_DESKTOP+=" xfce4 lxtask xfce4-screenshooter xfce4-notifyd xfce4-terminal desktop-base software-properties-gtk thunar-archive-plugin"
+		PACKAGE_LIST_DESKTOP+=" xfce4 lxtask xfce4-screenshooter xfce4-notifyd xfce4-terminal desktop-base software-properties-gtk thunar-archive-plugin xfce4-power-manager"
 		[[ $DISTRIBUTION == Ubuntu ]] && PACKAGE_LIST_DESKTOP+=" update-manager"
 	;;
 	lxde)
@@ -387,6 +399,11 @@ case $DISTRIB_RELEASE in
 		PACKAGE_LIST_MESA="libclang-cpp11 libclc-r600 libclc-amdgcn libllvm10"
 		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_XSERVER $PACKAGE_LIST_GSTREAMER $PACKAGE_LIST_KODI $PACKAGE_LIST_MESA"
 		PACKAGE_LIST_DESKTOP+=" xserver-xorg-input-all pulseaudio-module-gsettings firefox language-selector-gnome viewnior"
+	;;
+	noble)
+		DEBOOTSTRAP_COMPONENTS="main,universe"
+		[[ "$DISTRIB_TYPE" != "minimal" ]] && PACKAGE_LIST_RELEASE="man-db kbd gnupg2 dirmngr networkd-dispatcher libjpeg9 command-not-found"
+		PACKAGE_LIST_DESKTOP+=" $PACKAGE_LIST_GSTREAMER xserver-xorg-input-all pulseaudio-module-gsettings language-selector-gnome viewnior dbus-user-session "
 	;;
 esac
 

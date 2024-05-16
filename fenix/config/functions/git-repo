@@ -69,3 +69,7 @@ update_git_repo() {
     fi
 }
 
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:

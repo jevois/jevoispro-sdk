@@ -362,3 +362,8 @@ save_linux_config() {
 		mv "$LINUX_DIR"/defconfig "$LINUX_DIR"/arch/arm64/configs/$LINUX_DEFCONFIG
 	fi
 }
+
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:

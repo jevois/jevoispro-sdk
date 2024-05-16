@@ -222,3 +222,8 @@ desktop_postinstall() {
 		fi
 	fi
 }
+
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:

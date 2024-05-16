@@ -212,7 +212,7 @@ install_distribution_specific()
 			eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "systemctl disable lircd.socket lircd.service lircd-setup.service lircd-uinput.service lircmd.service irexec.service"'
 		fi
 		;;
-	bionic|focal)
+	bionic|focal|noble)
 		# remove doubled uname from motd
 		[[ -f $$ROOTFS_TEMP/etc/update-motd.d/10-uname ]] && rm $ROOTFS_TEMP/etc/update-motd.d/10-uname
 		# remove motd news from motd.ubuntu.com
@@ -344,15 +344,16 @@ create_rootfs_cache()
 	# stage: create apt sources list
 	create_sources_list "$DISTRIB_RELEASE" "$ROOTFS_TEMP/"
     mkdir -p ${ROOTFS_TEMP}/etc/apt/sources.list.d
-
-    # JEVOIS: problem with ca-certificates, need to reinstall
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y update"'
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y install --reinstall ca-certificates"'
+    mkdir -p ${ROOTFS_TEMP}/etc/apt/trusted.gpg.d
 
     # JEVOIS: add source for jevois packages. Since it is an https repo, bypass apt-cacher-ng:
+    # DEPRECATED: eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c \
+    #  "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
+    gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027
+    gpg --export DD24C027 > ${ROOTFS_TEMP}/etc/apt/trusted.gpg.d/jevois.gpg
+
     apt_extra="${apt_extra} -o Acquire::https::Proxy=DIRECT"
-    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt-key adv --keyserver keyserver.ubuntu.com --recv-keys DD24C027"'
-    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/apt focal main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
+    LC_ALL=C LANG=C echo "deb https://jevois.usc.edu/devapt $DISTRIB_RELEASE main" > ${ROOTFS_TEMP}/etc/apt/sources.list.d/jevois.list
     eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "apt -y $apt_extra -o Dir::Etc::sourcelist=sources.list.d/jevois.list update"'
     echo "JEVOIS: added jevois.usc.edu deb source for jevois packages."
 
@@ -369,9 +370,10 @@ create_rootfs_cache()
 	echo "Acquire::Languages "none";" > $ROOTFS_TEMP/etc/apt/apt.conf.d/no-languages
 
 	# stage: install key
-	cp $CONFIG/fenix.key $ROOTFS_TEMP
-	eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "cat fenix.key | apt-key add -"'
-	rm $ROOTFS_TEMP/fenix.key
+	#cp $CONFIG/fenix.key $ROOTFS_TEMP
+	#eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "cat fenix.key | apt-key add -"'
+	#rm $ROOTFS_TEMP/fenix.key
+	cp $CONFIG/fenix.key $ROOTFS_TEMP/etc/apt/trusted.gpg.d/fenix.asc
 
 	# add armhf arhitecture to arm64
 	if [[ $DISTRIB_ARCH == arm64 ]]; then
@@ -399,6 +401,11 @@ create_rootfs_cache()
 		error_msg "Installation of packages failed"
 		return -1
 	fi
+
+    # JEVOIS: configure pipx
+	info_msg "Configuring pipx"
+    echo 'eval "$(register-python-argcomplete pipx)"' >> ${ROOTFS_TEMP}/root/.bashrc
+    eval 'LC_ALL=C LANG=C chroot $ROOTFS_TEMP /bin/bash -c "pipx ensurepath"'
 
 	[ "$DEBUG" ] && {
 	# DEBUG: print free space
@@ -438,7 +445,7 @@ prepare_partitions()
 {
 	info_msg "Preparing image file for rootfs..."
 
-	if [[ $(lsb_release -sc) =~ bionic|focal ]]; then
+	if [[ $(lsb_release -sc) =~ bionic|focal|noble ]]; then
 		EXT4_MKOPTS="-q -F -L ROOTFS -m 2 -O ^64bit,^metadata_csum"
 	elif [[ $(lsb_release -sc) == "xenial" ]]; then
 		EXT4_MKOPTS="-q -F -L ROOTFS -m 2"
@@ -459,8 +466,8 @@ prepare_partitions()
 		# file creation and align the size up to 4MiB
 		if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
 			# Desktop image size
-            # JEVOIS: use +110% instead of khadas 40% so we have lots of room for custom software
-			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 2.1) / 1 + 128) / 4 + 1) * 4")
+            # JEVOIS: use +180% instead of khadas 40% so we have lots of room for custom software
+			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 2.8) / 1 + 128) / 4 + 1) * 4")
 		else
 			# Server image size
 			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 1.2) / 1 + 0) / 4 + 1) * 4")

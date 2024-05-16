@@ -1,11 +1,17 @@
 #!/bin/bash
+# USAGE: build.sh [uburel]
 
 make
 
 ver="1.2.0"
 pkgrel="1"
 arch=`dpkg --print-architecture`
-uburel=`lsb_release -rs`
+
+if [ "$#" -ne 1 ]; then
+    uburel=`lsb_release -rs`
+else
+    uburel="$1"
+fi
 
 
 sudo checkinstall \

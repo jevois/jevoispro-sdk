@@ -31,3 +31,8 @@ install_common_deb() {
 		install_deb_chroot $BUILD_DEBS/$VERSION/$KHADAS_BOARD/${DISTRIBUTION}-${DISTRIB_RELEASE}/wiringpi_debs/python3-wiringpi_*.deb
 	fi
 }
+
+# Local Variables:
+# mode: sh
+# sh-shell: bash
+# End:
