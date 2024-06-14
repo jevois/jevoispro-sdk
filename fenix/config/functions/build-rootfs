@@ -466,8 +466,8 @@ prepare_partitions()
 		# file creation and align the size up to 4MiB
 		if [[ "$DISTRIB_TYPE" != "server" ]] && [[ "$DISTRIB_TYPE" != "minimal" ]]; then
 			# Desktop image size
-            # JEVOIS: use +180% instead of khadas 40% so we have lots of room for custom software
-			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 2.8) / 1 + 128) / 4 + 1) * 4")
+            # JEVOIS: use +80% instead of khadas 40% so we have lots of room for custom software
+			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 1.8) / 1 + 128) / 4 + 1) * 4")
 		else
 			# Server image size
 			local rootfs_image_size=$(bc -l <<< "scale=0; ((($rootfs_size * 1.2) / 1 + 0) / 4 + 1) * 4")

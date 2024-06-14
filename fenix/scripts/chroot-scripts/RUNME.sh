@@ -62,7 +62,7 @@ sync
 ####################################################################################################
 
 # We do not want unattended upgrades as those could likely break our software:
-apt -y purge unattended-upgrades
+apt-get -y purge unattended-upgrades
 
 # Set default imgui window locations
 cat <<-EOF > /root/imgui.ini
@@ -77,40 +77,58 @@ Size=464,877
 Collapsed=0
 EOF
 
+# Install stuff needed for venv, pipx
+apt-get -y install python3.12-venv pipx
+
 # Install mali gpu drivers and others from jevois.usc.edu
-apt -y install linux-gpu-mali-fbdev aml-npu libamvenc libmultienc wiringpi python3-wiringpi \
-    glmark2-es2-fbdev mali-examples-aml tengine-libs libplayer-aml libcec \
-    encoder-libs-aml
+apt-get -y install linux-gpu-mali-fbdev aml-npu libamvenc libmultienc wiringpi python3-wiringpi \
+    glmark2-es2-fbdev mali-examples-aml tengine-libs libplayer-aml libcec
 
 # Need to update protobuf if we want to run the latest mediapipe:
-#pbver="21.2"
+#pbver="26.1"
 #wget https://github.com/protocolbuffers/protobuf/releases/download/v${pbver}/protoc-${pbver}-linux-aarch_64.zip
 #unzip protoc-${pbver}-linux-aarch_64.zip -d /usr/local
 #/bin/rm protoc-${pbver}-linux-aarch_64.zip
 
-if false; then
-#mp="mediapipe-0.8-cp38-none-linux_aarch64.whl" # version that shipped with jevois < 1.18
-######## JEVOIS NOBLE: need a cp312 version...
-mp=mediapipe-0.8-cp38-cp38-linux_aarch64.whl # works with jevois 1.18, objectron segfaults, no selfie
-#mp="mediapipe-0.8.10.2-cp38-cp38-linux_aarch64.whl" # works but twice slower...
-wget http://jevois.org/pkg/$mp
-pipx install pip --upgrade
-pipx install numpy --upgrade
-pipx install testresources
-pipx install setuptools --upgrade
-pipx install cpython
-pipx install pillow
-pipx install dataclasses
-pipx install protobuf==3.19.4
-pipx install $mp
-rm $mp
-fi
+# install onnxruntime which may be useful for CPU deep nets:
+pipx install onnxruntime
 
 # openai whisper speech to text
 #pipx install -U openai-whisper
 
-# install onnxruntime which may be useful for CPU deep nets:
-pipx install onnxruntime
+# Setup a virtual environment as we cannot just globally use pip in noble anymore:
+python3 -m venv /root/jvenv
+source /root/jvenv/bin/activate
+pip install pip --upgrade
+
+# Activate our virtual env on any bash:
+cat >>/root/.bashrc <<EOF
+
+# JeVois: activate virtual env:
+if [ "X$VIRTUAL_ENV" = "X" -a -d /root/jvenv ]; then
+  source /root/jvenv/bin/activate
+fi
+EOF
+
+# Apriltag for python:
+pip install apriltag
+
+# transformers:
+pip install -U transformers
+
+#mp="mediapipe-0.8-cp38-none-linux_aarch64.whl" # version that shipped with jevois < 1.18
+#mp="mediapipe-0.8-cp38-cp38-linux_aarch64.whl" # works with jevois 1.18, objectron segfaults, no selfie, fast
+#mp="mediapipe-0.8.10.2-cp38-cp38-linux_aarch64.whl" # works but twice slower...
+mp="mediapipe-0.10.14-cp312-cp312-linux_aarch64.whl" # jevois 1.21.0 on noble, fast, objectron, selfie ok
+wget http://jevois.org/pkg/$mp
+pip install numpy --upgrade
+pip install setuptools --upgrade
+pip install absl-py testresources 'attrs>=19.1.0' 'flatbuffers>=2.0' jax jaxlib matplotlib \
+    opencv-contrib-python 'protobuf>=4.25.3,<5' 'sounddevice>=0.4.4' cpython pillow dataclasses CFFI \
+    ml-dtypes opt-einsum scipy contourpy cycler fonttools kiwisolver packaging pillow pyparsing python-dateutil \
+    pycparser six
+pip install $mp
+rm $mp
 
 # Disable hostapd as it pollutes our logs:
 systemctl disable hostapd
@@ -121,7 +139,7 @@ hailo="4.17.0"
 # JEVOIS: NEED TO WAIT UNTIL CP312 available...
 #hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
 #wget http://jevois.org/pkg/${hrtwheel}
-#pipx install ${hrtwheel}
+#pip install ${hrtwheel}
 #/bin/rm ${hrtwheel}
 #pipx install numpy --upgrade # hailo just downgraded numpy, try to upgrade it back...
 
@@ -169,20 +187,14 @@ fi
 
 # Update everything
 pipx upgrade-all
-apt update
-apt -y upgrade # upgrade NPU and GPU packages from jevois repo
-apt -y install --reinstall ca-certificates
+apt-get update
+apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
+apt-get -y install --reinstall ca-certificates
 ssh-keygen -A # for problems with openssh-server not starting...
 
-# Install unsnapped firefox
-ff='firefox_126.0+build2-0ubuntu0.24.04.1~mt1_arm64.deb'
-wget "http://jevois.org/pkg/${ff}"
-dpkg -i "${ff}"
-rm "${ff}"
-
 # Clean up
-apt -y clean
-apt -y autoclean
+apt-get -y clean
+apt-get -y autoclean
 history -c
 
 /bin/rm -rf /jevois # not sure how that one got created in the first place...

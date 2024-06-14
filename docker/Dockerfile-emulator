@@ -1,0 +1,80 @@
+# This file is mainly for JeVois development team
+# Most users can instead pull the pre-built image from docker hub. See http://jevois.org/doc
+
+# build with: docker build --platform linux/arm64/v8 -t jevois/jevoispro-emulator:VERSION -f Dockerfile-emulator .
+# Then docker run -i --platform linux/arm64/v8 -t jevois/jevoispro-emulator:VERSION
+
+FROM arm64v8/ubuntu:24.04
+
+ARG DEBOOTSTRAP_LIST
+ARG PACKAGE_LIST
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LC_ALL=C
+
+# Update:
+RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
+
+# Use bash only to avoid env issues:
+RUN ln -snf /bin/bash /bin/sh
+SHELL ["/bin/bash", "-c"]
+
+# Basic stuff: first install apt-utils so other debs can be configured. Then a few base utils:
+RUN apt-get install -y apt-utils
+
+RUN apt-get install -y sudo git dialog lsb-release locales bc zip wget ccache gawk \
+    libncurses5-dev curl rsync bash-completion tzdata
+
+RUN apt-get install -y pv lzop zlib1g-dev unzip pkg-config whiptail debian-keyring debian-archive-keyring \
+    f2fs-tools libfile-fcntllock-perl ncurses-term p7zip-full dosfstools patchutils \
+    liblz4-tool linux-base swig aptly acl ncurses-base pixz bison flex cpio libglib2.0-dev libtool \
+    gettext bsdmainutils gpg ca-certificates
+
+# Install base packages:
+RUN apt-get -y install ${DEBOOTSTRAP_LIST}
+
+# Install jevois.usc.edu apt repo:
+RUN gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027 && \
+    gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
+RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
+
+# Update:
+RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
+
+# Install os packages:
+RUN apt-get -y install ${PACKAGE_LIST}
+
+# Generate a US locale:
+RUN locale-gen en_US.UTF-8
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8' TERM=screen
+
+# Instructions to user:
+RUN echo 'echo "Welcome to JeVois-Pro emulator container\n"' > /etc/profile.d/welcome.sh
+RUN echo 'echo "This container is a rough approximation of the OS running in the camera."' >> /etc/profile.d/welcome.sh
+RUN echo 'echo "You can use it to compile custom packages if cross-compiling is not an option.\n"' >> /etc/profile.d/welcome.sh
+RUN echo 'echo "If your CPU is x86_64, then expect this container to be slow as it runs in emulated aarch64 mode.\n"' >> /etc/profile.d/welcome.sh
+
+# Run the final fix script:
+COPY RUNME.sh .
+RUN ./RUNME.sh
+
+# We want g++-14 only:
+#RUN DEBIAN_FRONTEND=noninteractive apt-get -y purge gcc-13 g++-13 gfortran-13 cpp-13 libgcc-13-dev libstdc++-13-dev
+
+# Set g++-14 as default:
+#RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 --slave /usr/bin/g++ g++ /usr/bin/g++-14 \
+#  --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-14 && update-alternatives --set gcc /usr/bin/gcc-14 && \
+#   update-alternatives --set gcc /usr/bin/gcc-14
+
+# Clean up:
+RUN apt-get -y autoremove
+
+# Switch to normal user:
+#USER jevois
+#WORKDIR /home/jevois
+
+# Enable terminal colors:
+run echo 'TERM=screen' >> .bashrc
+
+ENTRYPOINT ["/bin/bash", "-l"]
+

@@ -89,7 +89,8 @@ prepare_host() {
 		;;
 		noble)
 			if [ "$build_host" != "noble" ]; then
-                if [ `debootstrap --version` != "debootstrap 1.0.134ubuntu1" ]; then
+                dbver=`debootstrap --version`
+                if [ "$dbver" != "debootstrap 1.0.134ubuntu1" ]; then
 				    error_msg "JEVOIS: Get the latest debootstrap from the noble distro and install it"
 				    return -1
                 fi

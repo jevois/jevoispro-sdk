@@ -305,12 +305,11 @@ PACKAGE_LIST_JEVOIS_COMPILE_OPENCV="build-essential gcc g++ gfortran cmake libbo
     libavcodec-dev libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     libv4l-dev libtbb-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev \
     libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qtbase5-dev python3-dev python3-numpy \
-    python3-pip 2to3 libgtk-3-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
+    2to3 libgtk-3-dev libturbojpeg checkinstall protobuf-compiler libprotobuf-dev \
     libtesseract-dev tesseract-ocr-all libleptonica-dev libopenblas-dev liblapacke-dev \
-    pylint libopenjp2-7-dev libopenjpip7 libopenjp2-tools \
-    gdb dkms libssl-dev git-lfs \
+    pylint libopenjp2-7-dev libopenjpip7 libopenjp2-tools gdb dkms libssl-dev git-lfs \
     libgtk2.0-dev pkg-config unzip automake libtool autoconf shellcheck libcairo2-dev libpango1.0-dev \
-    libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev"
+    libglib2.0-dev libgstreamer1.0-0 gstreamer1.0-plugins-base libusb-1.0-0-dev libopenmpi-dev"
 
 # libqt4-dev
 
@@ -319,27 +318,27 @@ PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf lib
     libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev \
     libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb-dev \
     libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev \
-    libxvidcore-dev x264 v4l-utils unzip python3-numpy python3-pip libgtk-3-dev \
+    libxvidcore-dev x264 v4l-utils unzip python3-numpy libgtk-3-dev \
     libturbojpeg checkinstall protobuf-compiler libprotobuf-dev libprotoc-dev libtesseract-dev tesseract-ocr-all \
     libleptonica-dev checkinstall git build-essential cmake mercurial doxygen-gui graphviz libboost-all-dev \
     libjpeg-turbo8-dev autoconf libeigen3-dev screen gawk u-boot-tools libgtk2.0-dev pkg-config \
     libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev libxine2-dev \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libfaac-dev \
     libmp3lame-dev libtheora-dev libvorbis-dev libxvidcore-dev x264 fatresize \
-    v4l-utils unzip python3-dev libgtk-3-dev libturbojpeg libgles2-mesa \
+    v4l-utils unzip python3-dev libgtk-3-dev libturbojpeg \
     libgles2-mesa-dev ncftp flex libturbojpeg-dev u-boot-tools dpkg-dev flex curl wput libdmtx-dev \
-    subversion python3-scipy emacs tree python-dev-is-python3 \
-    libflac-dev libogg-dev libvorbis-dev libopenal-dev libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev \
-    libglm-dev libusb-dev libsdl2-dev sysstat strace libsdl2-dev libglm-dev libx11-dev python3-full pipx"
+    subversion python3-scipy emacs tree python-is-python3 libflac-dev libogg-dev libvorbis-dev libopenal-dev \
+    libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev libglm-dev libusb-dev libsdl2-dev sysstat strace \
+    libsdl2-dev libglm-dev libx11-dev python3-full python3-pil pipx firefox-nosnap"
 
 # Baseline jevois support software: openvino, opencv, hailo, coral, etc:
 PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev git hailort jevoispro-fan ffmpeg"
 
 # Google Coral TPU in python:
-#PACKAGE_LIST_JEVOIS_SOFTWARE+="python3-pil python3-tflite-runtime python3-pycoral pycoral-examples"
+#PACKAGE_LIST_JEVOIS_SOFTWARE+="python3-tflite-runtime python3-pycoral pycoral-examples"
 
 # Pre-install jevois and jevoisbase: (comment out when switching to a new version):
-##PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform"
+PACKAGE_LIST_JEVOIS_SOFTWARE+=" jevoispro-platform jevoisprobase-platform"
 
 PACKAGE_LIST_JEVOIS="linux-firmware ${PACKAGE_LIST_JEVOIS_COMPILE_OPENCV} ${PACKAGE_LIST_JEVOIS_COMPILE} \
     ${PACKAGE_LIST_JEVOIS_SOFTWARE}"

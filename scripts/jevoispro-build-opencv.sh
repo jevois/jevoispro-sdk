@@ -7,7 +7,7 @@ set -e
 
 # OpenCV version to build:
 ma=4
-mi=9
+mi=10
 pa=0
 
 # Support for MyriadX ended with 2022.3.2 so we are stuck there...
@@ -65,13 +65,13 @@ packages=( build-essential gcc-${gccver} g++-${gccver} gfortran-${gccver} cmake 
            libeigen3-dev libgtk2.0-dev libdc1394-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev
            libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev
            libtbb-dev ${qt4lib} libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev
-           libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qtbase5-dev \
-           python${pyver}-dev python3-numpy python3-pip libgtk-3-dev liblapacke-dev libturbojpeg \
-           checkinstall protobuf-compiler libprotobuf-dev \
-           libtesseract-dev tesseract-ocr-all libleptonica-dev libopenblas-dev libopenblas-openmp-dev
+           libtheora-dev libvorbis-dev libxvidcore-dev x264 v4l-utils unzip qtbase5-dev
+           python${pyver}-dev python3-numpy python3-pip libgtk-3-dev liblapacke-dev libturbojpeg
+           checkinstall protobuf-compiler libprotobuf-dev
+           libtesseract-dev tesseract-ocr-all libleptonica-dev libopenblas-openmp-dev
            pylint libopenjp2-7-dev libopenjpip7 libopenjp2-tools curl wget libssl-dev git pkg-config
            automake libtool shellcheck libcairo2-dev libpango1.0-dev libglib2.0-dev libgstreamer1.0-0
-           gstreamer1.0-plugins-base libusb-1.0-0-dev 
+           gstreamer1.0-plugins-base libusb-1.0-0-dev libopenmpi-dev
            # for openvino:
            clang libclang-dev clang-format ccache libssl-dev ca-certificates git-lfs libgtk2.0-dev pkg-config
            libtool autoconf shellcheck libcairo2-dev libpango1.0-dev libglib2.0-dev
@@ -183,41 +183,43 @@ if [ "X$REPLY" != "Xn" ]; then
         cd openvino-${vino}
         
         # Patch it up for compatibility with ubuntu noble:
-        sed -i '/#pragma once/a #include <cstdint>' src/common/util/include/openvino/util/file_util.hpp
-        sed -i '/#pragma once/a #include <cstdint>' src/common/preprocessing/ie_preprocess_gapi_kernels.hpp
-        sed -i '/#pragma once/a #include <cstdint>' src/common/itt/include/openvino/itt.hpp
-        
-        sed -i '/#include <array>/a #include <cstdint>' \
-            ../openvino_contrib-${vino}/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/utils/misc/Utility.h
-        sed -i '/#include <array>/a #include <cstdint>' \
-            thirdparty/ade/sources/ade/include/ade/typed_graph.hpp
-        sed -i '/#include <array>/a #include <cstdint>' \
-            ../openvino_contrib-2022.3.2/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/Strides.h
-        sed -i '/#include <array>/a #include <cstdint>' \
-            src/frontends/onnx/onnx_common/src/onnx_model_validator.cpp
-        sed -i '/#include <string>/a #include <cstdint>' \
-            src/plugins/intel_gpu/thirdparty/onednn_gpu/src/gpu/jit/gemm/gen_gemm_kernel_common.hpp
-        sed -i '/#include <string>/a #include <cstdint>' \
-            src/plugins/intel_gpu/src/kernel_selector/jitter.h
-        sed -i '/#include <string>/a #include <cstdint>' \
-            src/plugins/intel_gpu/include/intel_gpu/runtime/device_info.hpp
-        
-        sed -i '238i using JitConstant::GetDefinitions;' \
-            src/plugins/intel_gpu/src/kernel_selector/jitter.cpp
-        
-        sed -i '264i using primitive_impl::execute;' \
-            src/plugins/intel_gpu/src/graph/impls/cpu/proposal.cpp
-        
-        sed -i '71i using WeightBiasKernelBase::GetJitConstants;' \
-            src/plugins/intel_gpu/src/kernel_selector/kernels/deconvolution/deconvolution_kernel_base.h
-        
-        sed -i 's/return std::move/return /g' \
-            src/inference/include/ie/ie_blob.h
-        
-        sed -i 's/ -1/ 255/g' thirdparty/ocv/opencv_hal_neon.hpp
-        
-        sed -i 's/device.getInfo<CL_DEVICE_PLATFORM>()/device.getInfo<CL_DEVICE_PLATFORM>()()/g' \
-            src/plugins/intel_gpu/src/runtime/ocl/ocl_device_detector.cpp
+        if [ ${uburel} = "24.04" ]; then
+            sed -i '/#pragma once/a #include <cstdint>' src/common/util/include/openvino/util/file_util.hpp
+            sed -i '/#pragma once/a #include <cstdint>' src/common/preprocessing/ie_preprocess_gapi_kernels.hpp
+            sed -i '/#pragma once/a #include <cstdint>' src/common/itt/include/openvino/itt.hpp
+            
+            sed -i '/#include <array>/a #include <cstdint>' \
+                ../openvino_contrib-${vino}/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/utils/misc/Utility.h
+            sed -i '/#include <array>/a #include <cstdint>' \
+                thirdparty/ade/sources/ade/include/ade/typed_graph.hpp
+            sed -i '/#include <array>/a #include <cstdint>' \
+                ../openvino_contrib-2022.3.2/modules/arm_plugin/thirdparty/ComputeLibrary/arm_compute/core/Strides.h
+            sed -i '/#include <array>/a #include <cstdint>' \
+                src/frontends/onnx/onnx_common/src/onnx_model_validator.cpp
+            sed -i '/#include <string>/a #include <cstdint>' \
+                src/plugins/intel_gpu/thirdparty/onednn_gpu/src/gpu/jit/gemm/gen_gemm_kernel_common.hpp
+            sed -i '/#include <string>/a #include <cstdint>' \
+                src/plugins/intel_gpu/src/kernel_selector/jitter.h
+            sed -i '/#include <string>/a #include <cstdint>' \
+                src/plugins/intel_gpu/include/intel_gpu/runtime/device_info.hpp
+            
+            sed -i '238i using JitConstant::GetDefinitions;' \
+                src/plugins/intel_gpu/src/kernel_selector/jitter.cpp
+            
+            sed -i '264i using primitive_impl::execute;' \
+                src/plugins/intel_gpu/src/graph/impls/cpu/proposal.cpp
+            
+            sed -i '71i using WeightBiasKernelBase::GetJitConstants;' \
+                src/plugins/intel_gpu/src/kernel_selector/kernels/deconvolution/deconvolution_kernel_base.h
+            
+            sed -i 's/return std::move/return /g' \
+                src/inference/include/ie/ie_blob.h
+            
+            sed -i 's/ -1/ 255/g' thirdparty/ocv/opencv_hal_neon.hpp
+            
+            sed -i 's/device.getInfo<CL_DEVICE_PLATFORM>()/device.getInfo<CL_DEVICE_PLATFORM>()()/g' \
+                src/plugins/intel_gpu/src/runtime/ocl/ocl_device_detector.cpp
+        fi
     else
         cd openvino-${vino}
     fi        
@@ -341,6 +343,10 @@ if [ "X$REPLY" != "Xn" ]; then
     # Run cmake to generate the makefile, install to /usr:
     cd opencv-${ver}
     mkdir build
+
+    # Patch location of OpenVino:
+    sed -i -e "s/find_package(OpenVINO QUIET)/find_package(OpenVINO QUIET PATHS \/usr\/share\/jevoispro-openvino-${vino}\/runtime\/cmake)/" cmake/OpenCVDetectInferenceEngine.cmake
+    
     cd build
 
     opts="-DCMAKE_BUILD_TYPE=RELEASE \
@@ -385,14 +391,10 @@ if [ "X$REPLY" != "Xn" ]; then
     -DWITH_INF_ENGINE=ON \
     -Dngraph_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
     -DInferenceEngine_DIR=/usr/share/jevoispro-openvino-${vino}/runtime/cmake \
-    -DINF_ENGINE_RELEASE=${infrel} \
-    -DINF_ENGINE_VERSION=${vino} \
-    -DHAVE_INF_ENGINE=1 \
-    -DCMAKE_FIND_ROOT_PATH=/usr/share/jevoispro-openvino-${vino}/ \
     \
-    -DBUILD_EXAMPLES=ON \
-    -DINSTALL_C_EXAMPLES=ON \
-    -DINSTALL_PYTHON_EXAMPLES=ON \
+    -DBUILD_EXAMPLES=OFF \
+    -DINSTALL_C_EXAMPLES=OFF \
+    -DINSTALL_PYTHON_EXAMPLES=OFF \
     \
     -DOPENCV_ENABLE_NONFREE=ON \
     -DOPENCV_EXTRA_MODULES_PATH=${ocvroot}/opencv_contrib-${ver}/modules \
@@ -404,6 +406,9 @@ if [ "X$REPLY" != "Xn" ]; then
     -DCPACK_BINARY_TGZ=OFF"
     # May want to check this: WITH_PLAIDML, WITH_QT, WITH_OPENGL (likely no, we have opengl-es)
 
+    # Opencv 4.10 fails to find mpi.h, add eplicit path:
+    export CXXFLAGS="-I/usr/include/${libarch}-linux-gnu -I/usr/include/${libarch}-linux-gnu/mpi"
+    
     cmake ${opts} ..
 
     # build

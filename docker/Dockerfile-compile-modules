@@ -1,0 +1,55 @@
+
+# Install docker as described here (we chose the apt-based install for Ubuntu):
+# https://docs.docker.com/engine/install/ubuntu/
+#
+# Then build with: docker build --platform linux/arm64/v8 -t jvpsdk .
+#
+# Once built, docker run -it --platform linux/arm64/v8 jvpsdk
+
+FROM ubuntu:24.04
+
+# Update:
+RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
+
+# Use bash only to avoid env issues:
+RUN ln -snf /bin/bash /bin/sh
+SHELL ["/bin/bash", "-c"]
+
+# Install base packages:
+RUN apt-get -y install gpg locales ca-certificates
+
+# Install jevois.usc.edu apt repo:
+RUN gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027 && \
+    gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
+RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
+
+# Update:
+RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
+
+# The jevoispro-sdk deb will pull in all needed dependencies:
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install jevoispro-sdk-dev
+
+# Clean up:
+RUN apt-get -y autoremove
+
+# Generate a US locale:
+RUN locale-gen en_US.UTF-8
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8' TERM=screen
+
+# Instructions to user:
+RUN echo 'echo "Welcome to JeVoisPro module build container\n"' > /etc/profile.d/welcome.sh
+#RUN echo 'echo "To rebuild everything, just run: ./rebuild-os.sh -y"' >> /etc/profile.d/welcome.sh
+#RUN echo 'echo "The resulting .deb packages will be in the current directory.\n"' >> /etc/profile.d/welcome.sh
+
+# Switch to normal user:
+RUN useradd -c 'jevois' -m -d /home/jevois -s /bin/bash jevois
+RUN sed -i -e '/\%sudo/ c \%sudo ALL=(ALL) NOPASSWD: ALL' /etc/sudoers
+RUN usermod -a -G sudo jevois
+USER jevois
+WORKDIR /home/jevois
+
+# Enable terminal colors:
+run echo 'TERM=xterm-256color' >> .bashrc
+
+ENTRYPOINT ["/bin/bash", "-l"]
+
