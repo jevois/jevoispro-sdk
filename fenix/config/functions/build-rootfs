@@ -570,6 +570,14 @@ p
 w
 
 EOF
+        # JEVOIS: detach any stale loop devs in case of previously aborted builds
+        losetup -D
+
+        # JEVOIS: may need to mknod loop dev when running in docker
+        if [[ ! -e /dev/loop0 ]]; then
+            mknod /dev/loop0 b 7
+            chmod 660 /dev/loop0
+        fi
 
 		IMAGE_LOOP_DEV="$(losetup --show -f ${BUILD_IMAGES}/${IMAGE_FILE_NAME})"
 		if [[ -z $IMAGE_LOOP_DEV ]]; then

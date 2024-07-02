@@ -59,12 +59,12 @@ COPY RUNME.sh .
 RUN ./RUNME.sh
 
 # We want g++-14 only:
-#RUN DEBIAN_FRONTEND=noninteractive apt-get -y purge gcc-13 g++-13 gfortran-13 cpp-13 libgcc-13-dev libstdc++-13-dev
+#RUN apt-get -y purge gcc-13 g++-13 gfortran-13 cpp-13 libgcc-13-dev libstdc++-13-dev
 
 # Set g++-14 as default:
-#RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 --slave /usr/bin/g++ g++ /usr/bin/g++-14 \
-#  --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-14 && update-alternatives --set gcc /usr/bin/gcc-14 && \
-#   update-alternatives --set gcc /usr/bin/gcc-14
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 --slave /usr/bin/g++ g++ /usr/bin/g++-14 \
+  --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-14 && update-alternatives --set gcc /usr/bin/gcc-14 && \
+   update-alternatives --set gcc /usr/bin/gcc-14
 
 # Clean up:
 RUN apt-get -y autoremove

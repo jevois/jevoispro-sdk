@@ -1,12 +1,20 @@
 #!/bin/bash
 
-# USAGE: rebuild-os.sh [-deb [-zip]]
+# USAGE: rebuild-os.sh [-deb|-shell [-zip]]
 #
 # Will rebuild the JeVois-Pro operating system and create a bootable microSD image as well as a sanitized
 # copy of the operating system to be used for cross-compilation of JeVois software.
 #
 # Optional -deb argument also create a deb package that contains all the results.
+# Optional -shell argument just runs a bash shell, useful to debug running rebuild-os.sh in docker
 # Optional -zip argument also computes the md5sum of the image and zips the image+md5 for flashing using Balena Etcher
+
+if [ "X$1" = "X-shell" ]; then
+    echo "Dropping into a shell. Run ./rebuild-os.sh -deb -zip";
+    /bin/bash
+    echo "Exiting rebuild-os.sh..."
+    exit 0
+fi
 
 ver="1.21.0"
 gitbranch="master"
@@ -88,7 +96,7 @@ sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/lab
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevois
 
 # Write the version of this SDK, when compiling JeVois we will check it:
-echo $ver | sudo tee "/usr/share/jevoispro-sdk-version.txt"
+echo $ver | sudo tee "/usr/share/jevoispro-sdk/jevoispro-sdk-version.txt"
 
 # Optionally create a deb:
 if [ "X$1" = "X-deb" ]; then

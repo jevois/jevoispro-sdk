@@ -77,24 +77,12 @@ Size=464,877
 Collapsed=0
 EOF
 
-# Install stuff needed for venv, pipx
-apt-get -y install python3.12-venv pipx
+# Install stuff needed for venv:
+apt-get -y install python3.12-venv
 
 # Install mali gpu drivers and others from jevois.usc.edu
 apt-get -y install linux-gpu-mali-fbdev aml-npu libamvenc libmultienc wiringpi python3-wiringpi \
     glmark2-es2-fbdev mali-examples-aml tengine-libs libplayer-aml libcec
-
-# Need to update protobuf if we want to run the latest mediapipe:
-#pbver="26.1"
-#wget https://github.com/protocolbuffers/protobuf/releases/download/v${pbver}/protoc-${pbver}-linux-aarch_64.zip
-#unzip protoc-${pbver}-linux-aarch_64.zip -d /usr/local
-#/bin/rm protoc-${pbver}-linux-aarch_64.zip
-
-# install onnxruntime which may be useful for CPU deep nets:
-pipx install onnxruntime
-
-# openai whisper speech to text
-#pipx install -U openai-whisper
 
 # Setup a virtual environment as we cannot just globally use pip in noble anymore:
 python3 -m venv /root/jvenv
@@ -102,13 +90,20 @@ source /root/jvenv/bin/activate
 pip install pip --upgrade
 
 # Activate our virtual env on any bash:
+/usr/bin/bash -c true
 cat >>/root/.bashrc <<EOF
 
 # JeVois: activate virtual env:
-if [ "X$VIRTUAL_ENV" = "X" -a -d /root/jvenv ]; then
+if [ "X\$VIRTUAL_ENV" = "X" -a -d /root/jvenv ]; then
   source /root/jvenv/bin/activate
 fi
 EOF
+
+# install onnxruntime which may be useful for CPU deep nets:
+pip install onnxruntime
+
+# openai whisper speech to text
+#pip install -U openai-whisper
 
 # Apriltag for python:
 pip install apriltag
@@ -116,32 +111,27 @@ pip install apriltag
 # transformers:
 pip install -U transformers
 
-#mp="mediapipe-0.8-cp38-none-linux_aarch64.whl" # version that shipped with jevois < 1.18
-#mp="mediapipe-0.8-cp38-cp38-linux_aarch64.whl" # works with jevois 1.18, objectron segfaults, no selfie, fast
-#mp="mediapipe-0.8.10.2-cp38-cp38-linux_aarch64.whl" # works but twice slower...
-mp="mediapipe-0.10.14-cp312-cp312-linux_aarch64.whl" # jevois 1.21.0 on noble, fast, objectron, selfie ok
-wget http://jevois.org/pkg/$mp
-pip install numpy --upgrade
-pip install setuptools --upgrade
-pip install absl-py testresources 'attrs>=19.1.0' 'flatbuffers>=2.0' jax jaxlib matplotlib \
-    opencv-contrib-python 'protobuf>=4.25.3,<5' 'sounddevice>=0.4.4' cpython pillow dataclasses CFFI \
-    ml-dtypes opt-einsum scipy contourpy cycler fonttools kiwisolver packaging pillow pyparsing python-dateutil \
-    pycparser six
-pip install $mp
-rm $mp
+# misc python packages:
+pip install psutil
+
+# numpy 1.x needed as 2.x has init problems with pycoral:
+npver="1.26.4"
+pip install numpy==${npver}
+
+# mediapipe compiled for jevois:
+pip install http://jevois.org/pkg/mediapipe-0.10.14-cp312-cp312-linux_aarch64.whl
+
+# tflite and pycoral compiled by jevois for python 3.12:
+pip install http://jevois.org/pkg/tflite_runtime-2.5.0.post1-cp312-cp312-linux_aarch64.whl
+pip install http://jevois.org/pkg/pycoral-2.0.0-cp312-cp312-linux_aarch64.whl
 
 # Disable hostapd as it pollutes our logs:
 systemctl disable hostapd
 
 # Pre-install Hailo drivers (Note: hailort deb is already installed from jevois.usc.edu):
 hailo="4.17.0"
-
 # JEVOIS: NEED TO WAIT UNTIL CP312 available...
-#hrtwheel="hailort-${hailo}-cp38-cp38-linux_aarch64.whl"
-#wget http://jevois.org/pkg/${hrtwheel}
-#pip install ${hrtwheel}
-#/bin/rm ${hrtwheel}
-#pipx install numpy --upgrade # hailo just downgraded numpy, try to upgrade it back...
+# pip install http://jevois.org/pkg/hailort-${hailo}-cp312-cp312-linux_aarch64.whl
 
 # Kernel to use for dkms and Hailo PCIe driver:
 export KVER="4.9.241"
@@ -180,17 +170,33 @@ ARCH=arm64 dkms add -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms build -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms install -k ${KVER} -m 8812au -v 4.2.3
 
+# Get ollama and a couple models; we need to patch the install script to use aarch64 instead of autodetect:
+wget https://ollama.com/install.sh
+sed -i -e "/ARCH=/a ARCH=arm64" install.sh
+sed -i -e "/KERN=/a KERN=${KVER}" install.sh
+sed -i -e 'x;/./{x;b};x;/check_gpu/h;//a return 0' install.sh # disable check_gpu() function
+chmod a+x install.sh
+./install.sh
+/bin/rm install.sh
+
+usermod -a -G ollama jevois
+systemctl enable ollama
+
+pip install ollama
+ollama pull moondream
+ollama pull tinydolphin
+
 # Boot into jevois GUI by default:
 if [ -f /usr/bin/jevoispro.sh ]; then
    systemctl set-default jevoispro.target
 fi
 
 # Update everything
-pipx upgrade-all
 apt-get update
 apt-get -y upgrade # upgrade NPU and GPU packages from jevois repo
 apt-get -y install --reinstall ca-certificates
 ssh-keygen -A # for problems with openssh-server not starting...
+pip install numpy==${npver} # hailo may have downgraded numpy...
 
 # Clean up
 apt-get -y clean

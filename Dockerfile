@@ -5,9 +5,10 @@
 # Install docker as described here (we chose the apt-based install for Ubuntu):
 # https://docs.docker.com/engine/install/ubuntu/
 #
-# Then build with: cd jevoispro-sdk/docker/ && docker build -t jevois/jevoispro-sdk:1.21.0 -f Dockerfile-rebuild-os .
+# Then build with: cd jevoispro-sdk && docker build -t jevois/jevoispro-sdk-build:1.21.0 .
+# If it cannot connect to ubuntu servers, try adding: --no-cache --network=host
 #
-# Once built: docker run -it jevois/jevoispro-sdk:1.21.0
+# Once built: ./rebuild-os-in-docker.sh -deb -zip
 
 FROM ubuntu:24.04
 
@@ -27,7 +28,7 @@ RUN apt-get install -y sudo git dialog lsb-release binutils wget ca-certificates
   whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev btrfs-progs \
   ncurses-term p7zip-full kmod dosfstools fakeroot curl patchutils python3 liblz4-tool linux-base swig aptly acl \
   systemd-container udev lib32stdc++6 libc6-i386 lib32ncurses6 lib32tinfo6 locales ncurses-base pixz bison \
-  flex libfl-dev lib32z1 tzdata cpio libglib2.0-dev libtool gettext bsdmainutils bash-completion
+  flex libfl-dev lib32z1 tzdata cpio libglib2.0-dev libtool gettext bsdmainutils bash-completion fdisk
   
 # Base packages:
 RUN apt-get install -y git git-lfs dialog lsb-release binutils wget ca-certificates \
@@ -78,9 +79,9 @@ RUN apt-get -y install \
     libglm-dev libusb-dev libsdl2-dev sysstat strace
 
 # Install jevois.usc.edu apt repo:
-RUN gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027 && \
-    gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
-RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
+#RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys DD24C027 && \
+#    gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
+#RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
 
 # Update:
 RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
@@ -92,19 +93,5 @@ RUN apt-get -y autoremove
 RUN locale-gen en_US.UTF-8
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8' TERM=screen
 
-# Instructions to user:
-RUN echo 'echo "Welcome to JeVoisPro-SDK build container\n"' > /etc/profile.d/welcome.sh
-RUN echo 'echo "To rebuild everything, just run: ./rebuild-os.sh -deb -zip"' >> /etc/profile.d/welcome.sh
-RUN echo 'echo "The resulting .deb and .zip packages will be in the debs/ directory.\n"' >> /etc/profile.d/welcome.sh
-
-# Switch to normal user:
-RUN useradd -c 'jevois' -m -d /home/jevois -s /bin/bash jevois
-RUN sed -i -e '/\%sudo/ c \%sudo ALL=(ALL) NOPASSWD: ALL' /etc/sudoers
-RUN usermod -a -G sudo jevois
-USER jevois
-WORKDIR /home/jevois
-
-# Enable terminal colors:
-run echo 'TERM=xterm-256color' >> .bashrc
-
-ENTRYPOINT ["/bin/bash", "-l"]
+# Get ready to run as the same user as the caller:
+COPY docker/with_the_same_user /

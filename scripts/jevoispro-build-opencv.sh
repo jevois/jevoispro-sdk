@@ -29,7 +29,7 @@ arch=`dpkg --print-architecture` # amd64 or arm64
 ncpu=`grep -c processor /proc/cpuinfo`
 root=""
 
-job="16"
+job=""
 if [ $arch != "amd64" -a ! -f /.dockerenv ]; then job="4"; fi
 
 # NOTE: 4.6.0 disable OpenCL on host build as it leads to an undefined symbol in python??
@@ -469,7 +469,7 @@ EOF
          -y \
          --install=no \
          --pkgrelease "${pkgrel}ubuntu${uburel}" \
-         --requires "${pkgdeps}"
+         --requires "${pkgdeps}, jevoispro-openvino"
 
     if [ -d ~/jevois/software/jevois/Contrib/npu/include/ ]; then
         question "Update jevois/Contrib/npu with TIM-VX installed here"

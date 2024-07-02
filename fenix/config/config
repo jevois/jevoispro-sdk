@@ -274,7 +274,7 @@ if [[ "$DISTRIB_TYPE" != "minimal" ]]; then
 		iperf3 software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping \
 		bluetooth bluez bluez-tools watchdog i2c-tools qrencode clinfo ocl-icd-libopencl1 \
 		p7zip p7zip-full lrzip lzip lzop ncompress unar zstd edid-decode libgtk-3-0 dnsmasq-base ppp \
-		modemmanager mobile-broadband-provider-info zlib1g-dev"
+		mobile-broadband-provider-info zlib1g-dev"
 fi
 
 PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils xterm thunar-volman \
@@ -283,8 +283,8 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 	policykit-1 profile-sync-daemon numix-gtk-theme gnome-system-tools lightdm lightdm-gtk-greeter gufw yad zenity guvcview onboard"
 
 PACKAGE_LIST_OFFICE="gedit galculator hexchat mpv gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf \
-	system-config-printer-common system-config-printer paprefs dbus-x11 tango-icon-theme fbi \
-	cups-pk-helper cups geany atril xarchiver meld remmina kazam avahi-daemon transmission"
+	paprefs dbus-x11 tango-icon-theme fbi \
+	geany atril xarchiver meld avahi-daemon"
 
 PACKAGE_LIST_XSERVER="libunwind8 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xf86dri0 libxcb-xkb1 libxcb-xv0 \
 	libpixman-1-dev x11proto-core-dev x11proto-input-dev x11proto-xext-dev x11proto-video-dev x11proto-randr-dev x11proto-render-dev x11proto-dri2-dev \
@@ -329,7 +329,7 @@ PACKAGE_LIST_JEVOIS_COMPILE="build-essential cmake libboost-all-dev autoconf lib
     libgles2-mesa-dev ncftp flex libturbojpeg-dev u-boot-tools dpkg-dev flex curl wput libdmtx-dev \
     subversion python3-scipy emacs tree python-is-python3 libflac-dev libogg-dev libvorbis-dev libopenal-dev \
     libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev libglm-dev libusb-dev libsdl2-dev sysstat strace \
-    libsdl2-dev libglm-dev libx11-dev python3-full python3-pil pipx firefox-nosnap"
+    libsdl2-dev libglm-dev libx11-dev python3-full python3-pil pipx pybind11-dev firefox-nosnap"
 
 # Baseline jevois support software: openvino, opencv, hailo, coral, etc:
 PACKAGE_LIST_JEVOIS_SOFTWARE="jevoispro-openvino jevoispro-opencv libedgetpu1-std libedgetpu-dev git hailort jevoispro-fan ffmpeg"
