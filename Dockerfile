@@ -42,7 +42,7 @@ RUN apt-get install -y git git-lfs dialog lsb-release binutils wget ca-certifica
     bash-completion sudo binutils-arm-linux-gnueabihf cpp-13-arm-linux-gnueabihf cpp-arm-linux-gnueabihf \
     gcc-13-arm-linux-gnueabihf gcc-13-arm-linux-gnueabihf-base gcc-13-cross-base gcc-14-cross-base \
     gcc-arm-linux-gnueabihf libasan8-armhf-cross libatomic1-armhf-cross libgcc-13-dev-armhf-cross \
-    libgcc-s1-armhf-cross libgomp1-armhf-cross libstdc++6-armhf-cross libubsan1-armhf-cross
+    libgcc-s1-armhf-cross libgomp1-armhf-cross libstdc++6-armhf-cross libubsan1-armhf-cross coreutils
 
 # Stuff that is os-version-dependent:
 RUN apt-get -y install build-essential gcc-14 g++-14 gfortran-14 python3.12-dev
