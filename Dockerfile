@@ -39,12 +39,15 @@ RUN apt-get install -y git git-lfs dialog lsb-release binutils wget ca-certifica
     patchutils python3 liblz4-tool linux-base swig aptly acl udev \
     lib32stdc++6 libc6-i386 lib32ncurses6 lib32tinfo6 locales ncurses-base \
     pixz bison libbison-dev flex libfl-dev lib32z1 tzdata cpio libglib2.0-dev libtool gettext bsdmainutils \
-    bash-completion sudo
+    bash-completion sudo binutils-arm-linux-gnueabihf cpp-13-arm-linux-gnueabihf cpp-arm-linux-gnueabihf \
+    gcc-13-arm-linux-gnueabihf gcc-13-arm-linux-gnueabihf-base gcc-13-cross-base gcc-14-cross-base \
+    gcc-arm-linux-gnueabihf libasan8-armhf-cross libatomic1-armhf-cross libgcc-13-dev-armhf-cross \
+    libgcc-s1-armhf-cross libgomp1-armhf-cross libstdc++6-armhf-cross libubsan1-armhf-cross
 
 # Stuff that is os-version-dependent:
 RUN apt-get -y install build-essential gcc-14 g++-14 gfortran-14 python3.12-dev
     
-# To compile opencv and openvino:
+# To compile opencv and openvino for host:
 RUN apt-get -y install \
     cmake libboost-all-dev autoconf libeigen3-dev libgtk2.0-dev libdc1394-dev libjpeg-dev libpng-dev libtiff5-dev \
     libavcodec-dev libavformat-dev libswscale-dev libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
@@ -60,7 +63,7 @@ RUN apt-get -y install \
     libudev1 libusb-1.0-0 libusb-1.0-0-dev nlohmann-json3-dev python3-yaml python3-setuptools python3-wheel \
     cython3
 
-# To compile JeVois:
+# To compile JeVois for host:
 RUN apt-get -y install \
     libeigen3-dev libgtk2.0-dev libjpeg-dev libpng-dev libtiff5-dev libavcodec-dev libavformat-dev libswscale-dev \
     libxine2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libv4l-dev libtbb-dev \
@@ -77,11 +80,6 @@ RUN apt-get -y install \
     subversion python3-scipy emacs tree \
     libflac-dev libogg-dev libvorbis-dev libopenal-dev libjpeg8-dev libfreetype6-dev libudev-dev libdrm-dev libgbm-dev \
     libglm-dev libusb-dev libsdl2-dev sysstat strace
-
-# Install jevois.usc.edu apt repo:
-#RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys DD24C027 && \
-#    gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
-#RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
 
 # Update:
 RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade

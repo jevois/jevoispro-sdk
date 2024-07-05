@@ -172,9 +172,9 @@ ARCH=arm64 dkms install -k ${KVER} -m 8812au -v 4.2.3
 
 # Get ollama and a couple models; we need to patch the install script to use aarch64 instead of autodetect:
 wget https://ollama.com/install.sh
-sed -i -e "/ARCH=/a ARCH=arm64" install.sh
-sed -i -e "/KERN=/a KERN=${KVER}" install.sh
-sed -i -e 'x;/./{x;b};x;/check_gpu/h;//a return 0' install.sh # disable check_gpu() function
+sed -i -e 'x;/./{x;b};x;/ARCH=/h;//a ARCH=arm64' install.sh # force arm64
+sed -i -e "x;/./{x;b};x;/KERN=/h;//a KERN=${KVER}" install.sh # pass correct kernel version
+sed -i -e 'x;/./{x;b};x;/check_gpu/h;//a return 1' install.sh # disable check_gpu() function
 chmod a+x install.sh
 ./install.sh
 /bin/rm install.sh
