@@ -36,7 +36,7 @@ RUN apt-get -y install ${DEBOOTSTRAP_LIST}
 # Install jevois.usc.edu apt repo:
 RUN gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027 && \
     gpg --export DD24C027 > /etc/apt/trusted.gpg.d/jevois.gpg
-RUN echo "deb https://jevois.usc.edu/devapt noble main" > /etc/apt/sources.list.d/jevois.list
+RUN echo "deb https://jevois.usc.edu/apt noble main" > /etc/apt/sources.list.d/jevois.list
 
 # Update:
 RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
