@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# Need to run with root permissions
+
 set -e # exit on any error
 
 # Check location:
@@ -17,16 +20,16 @@ if [ ! -d "$bdir" ]; then
 fi
     
 echo "Nuke old jevoispro-sysroot ..."
-if [ ! -d "${r}" ]; then sudo mkdir -p "${r}"; fi
+if [ ! -d "${r}" ]; then mkdir -p "${r}"; fi
 sr="${r}/jevoispro-sysroot"
-sudo /bin/rm -rf "${sr}"
+/bin/rm -rf "${sr}"
 
 echo "Create new jevoispro-sysroot ..."
-sudo mkdir "${sr}"
+mkdir "${sr}"
 
 cd "${bdir}"
 echo "Copy system ..."
-sudo tar cpf - . | ( cd "${sr}"; sudo tar xpf - )
+tar cpf - . | ( cd "${sr}"; tar xpf - )
 
 cd "${sr}"
 
@@ -35,9 +38,9 @@ cd "${sr}"
 # and not the x86_64 version that may (or not) be installed on our host system.
 didit=1
 while [ $didit -eq 1 ]; do
-    echo "Convert absolute symlinks to relative ..."
+    echo "Convert absolute symlinks to relative in ${sr} ..."
     didit=0
-    sudo find . -type l | while read l; do
+    find . -type l | while read l; do
         dest="$(readlink "$l")"
         if [[ ${dest:0:1} == "/" ]]; then
             #echo "   checking $l -> $dest"
@@ -48,7 +51,7 @@ while [ $didit -eq 1 ]; do
                 #echo "      DEST $destdir"
                 mod="$(realpath --relative-to="$srcdir" -s ".$dest")"
                 echo "$l -> $dest CHANGED TO -> ${mod}"
-                sudo ln -fs "${mod}" "$l"
+                ln -fs "${mod}" "$l"
                 didit=1
             else
                 echo "Skipping broken link $l -> $dest"

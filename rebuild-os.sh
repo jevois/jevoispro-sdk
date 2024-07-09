@@ -87,7 +87,7 @@ make
 
 # Make a copy of the system tree with all symlinks sanitized, will be used to cross-compile JeVois code:
 cd ..
-./scripts/jevoispro-copy-sysroot.sh
+sudo ./scripts/jevoispro-copy-sysroot.sh
 
 # cleanup a bit:
 sudo /bin/rm -rf /usr/share/jevoispro-sdk/jevoispro-sysroot/jevoispro
