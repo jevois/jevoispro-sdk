@@ -105,8 +105,9 @@ pip install onnxruntime
 # openai whisper speech to text
 #pip install -U openai-whisper
 
-# Apriltag for python:
-pip install apriltag
+# Apriltag for python: the default pip install does not compile properly for aarch64, get ours, which was obtained by
+# running 'pip install apriltag' on a running jevois-pro (the resuling wheel is in ~/.cache/pip/...):
+pip install http://jevois.org/pkg/apriltag-0.0.16-cp312-cp312-linux_aarch64.whl
 
 # transformers:
 pip install -U transformers
@@ -183,8 +184,10 @@ usermod -a -G ollama jevois
 systemctl enable ollama
 
 pip install ollama
-ollama pull moondream
-ollama pull tinydolphin
+
+# this does not seem to download to the correct location... will have to run it manually on a running camera:
+#ollama pull moondream
+#ollama pull tinydolphin
 
 # Boot into jevois GUI by default:
 if [ -f /usr/bin/jevoispro.sh ]; then
