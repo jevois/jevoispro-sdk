@@ -189,6 +189,13 @@ pip install ollama
 #ollama pull moondream
 #ollama pull tinydolphin
 
+# pull pe-installed models:
+omodels="ollama-models-1.21.0.tbz"
+cd /
+wget http://jevois.org/pkg/${omodels}
+tar jxvf ${omodels}
+/bin/rm -f ${omodels}
+
 # Boot into jevois GUI by default:
 if [ -f /usr/bin/jevoispro.sh ]; then
    systemctl set-default jevoispro.target
