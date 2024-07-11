@@ -7,7 +7,7 @@
 #
 # Optional -deb argument also create a deb package that contains all the results.
 # Optional -shell argument just runs a bash shell, useful to debug running rebuild-os.sh in docker
-# Optional -zip argument also computes the md5sum of the image and zips the image+md5 for flashing using Balena Etcher
+# Optional -zip argument also computes sha256sum of the image and zips the image+sha256 for flashing using Balena Etcher
 
 if [ "X$1" = "X-shell" ]; then
     echo "Dropping into a shell. Run ./rebuild-os.sh -deb -zip";
@@ -140,7 +140,7 @@ echo "DONE: IMAGE TO FLASH TO SD: $imgname"
 if [ "X$2" = "X-zip" ]; then
     echo "##### Creating JeVois-Pro SDK zip image package #####"
     stem="jevoispro-${ver}-62G"
-    /bin/rm "${stem}.zip" "${stem}.img" "${stem}.md5"
+    /bin/rm -f "${stem}.zip" "${stem}.img" "${stem}.sha256"
     /bin/mv "$imgname" "${stem}.img"
     sha256sum "${stem}.img" > "${stem}.sha256"
     zip -9 "${stem}.zip" "${stem}.img" "${stem}.sha256"
