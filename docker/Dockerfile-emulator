@@ -69,12 +69,5 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 --slave /
 # Clean up:
 RUN apt-get -y autoremove
 
-# Switch to normal user:
-#USER jevois
-#WORKDIR /home/jevois
-
-# Enable terminal colors:
-run echo 'TERM=screen' >> .bashrc
-
 ENTRYPOINT ["/bin/bash", "-l"]
 

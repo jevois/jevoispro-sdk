@@ -272,7 +272,7 @@ EOF
 
     # create post install and remove scripts:
     cat > postinstall-pak <<EOF
-#!/bin/sh
+#!/bin/bash
 # fix missing symlinks
 for f in /usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}/*.so.${vino}; do ln -sf $f ${f/.${vino}/}; done
 
@@ -430,7 +430,7 @@ EOF
 
     # create post install and remove scripts:
     cat > postinstall-pak <<EOF
-#!/bin/sh
+#!/bin/bash
 # fix missing symlinks
 for f in /usr/share/jevoispro-opencv-${ver}/lib/*.so.${ver}; do ln -sf $f ${f/.${ver}/}; done
 
