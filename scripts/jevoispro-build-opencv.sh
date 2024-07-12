@@ -274,7 +274,7 @@ EOF
     cat > postinstall-pak <<EOF
 #!/bin/bash
 # fix missing symlinks
-for f in /usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}/*.so.${vino}; do ln -sf $f ${f/.${vino}/}; done
+for f in /usr/share/jevoispro-openvino-${vino}/runtime/lib/${VINOARCH}/*.so.${vino}; do ln -sf \$f \${f/.${vino}/}; done
 
 # add to ldconfig:
 f=/etc/ld.so.conf.d/jevoispro-openvino.conf
@@ -432,7 +432,7 @@ EOF
     cat > postinstall-pak <<EOF
 #!/bin/bash
 # fix missing symlinks
-for f in /usr/share/jevoispro-opencv-${ver}/lib/*.so.${ver}; do ln -sf $f ${f/.${ver}/}; done
+for f in /usr/share/jevoispro-opencv-${ver}/lib/*.so.${ver}; do ln -sf \$f \${f/.${ver}/}; done
 
 # add to ldconfig:
 f=/etc/ld.so.conf.d/jevoispro-opencv.conf
