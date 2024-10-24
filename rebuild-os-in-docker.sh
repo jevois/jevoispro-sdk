@@ -25,5 +25,5 @@ docker run --rm -it --name jevoispro-sdk --pid=host --network=host \
        --device=/dev/loop-control:/dev/loop-control \
        --device=/dev/loop0:/dev/loop0 \
        --cap-add SYS_ADMIN \
-       jevois/jevoispro-sdk-build:1.21.0 \
+       jevois/jevoispro-sdk-build:1.22.0 \
        /with_the_same_user "/jevoispro-sdk/rebuild-os.sh ${BUILD_ARGS[@]}"

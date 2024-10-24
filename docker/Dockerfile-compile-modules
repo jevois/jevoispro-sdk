@@ -1,10 +1,17 @@
-
+# This file is mainly for JeVois development team
+#
+# Most users would just: (replace VERSION by a version number, e.g., 1.22.0)
+#   docker pull jevois/jevoispro-compile-modules:VERSION
+#   cd jevoispro-sdk
+#   ./docker/compile-modules-in-docker.sh
+#
+# JeVois team: To create the docker image:
+#
 # Install docker as described here (we chose the apt-based install for Ubuntu):
 # https://docs.docker.com/engine/install/ubuntu/
 #
-# Then build with: docker build -t jevois/jevoispro-compile-modules:1.21.0 -f Dockerfile-compile-modules .
-#
-# Once built, docker run -it jevois/jevoispro-compile-modules:1.21.0
+# Then build with: docker build -t jevois/jevoispro-compile-modules:VERSION -f Dockerfile-compile-modules .
+# Then push to docker hub: docker login && docker image push jevois/jevoispro-compile-modules:VERSION
 
 FROM ubuntu:24.04
 
@@ -19,7 +26,7 @@ RUN ln -snf /bin/bash /bin/sh
 SHELL ["/bin/bash", "-c"]
 
 # Install base packages:
-RUN apt-get -y install gpg locales ca-certificates
+RUN apt-get -y install gpg locales ca-certificates sudo apt-utils systemctl
 
 # Install jevois.usc.edu apt repo:
 RUN gpg --keyserver keyserver.ubuntu.com --recv-keys DD24C027 && \
@@ -30,6 +37,7 @@ RUN echo "deb https://jevois.usc.edu/apt noble main" > /etc/apt/sources.list.d/j
 RUN apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
 
 # The jevoispro-sdk deb will pull in all needed dependencies:
+RUN apt-get -y install hailort
 RUN apt-get -y install jevoispro-sdk-dev
 
 # Clean up:
@@ -39,20 +47,5 @@ RUN apt-get -y autoremove
 RUN locale-gen en_US.UTF-8
 ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8' TERM=screen
 
-# Instructions to user:
-RUN echo 'echo "Welcome to JeVoisPro module build container\n"' > /etc/profile.d/welcome.sh
-RUN echo 'echo "Start with: jevoispro-create-module TestVendor MyModule"' >> /etc/profile.d/welcome.sh
-RUN echo 'echo "Then: cd mymodule ; ./rebuild-pro-platform-pdeb.sh\n"' >> /etc/profile.d/welcome.sh
-
-# Switch to normal user:
-RUN useradd -c 'jevois' -m -d /home/jevois -s /bin/bash jevois
-RUN sed -i -e '/\%sudo/ c \%sudo ALL=(ALL) NOPASSWD: ALL' /etc/sudoers
-RUN usermod -a -G sudo jevois
-USER jevois
-WORKDIR /home/jevois
-
-# Enable terminal colors:
-run echo 'TERM=xterm-256color' >> .bashrc
-
-ENTRYPOINT ["/bin/bash", "-l"]
-
+# Get ready to run as the same user as the caller:
+COPY with_the_same_user /

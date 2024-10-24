@@ -16,7 +16,7 @@ if [ "X$1" = "X-shell" ]; then
     exit 0
 fi
 
-ver="1.21.0"
+ver="1.22.0"
 gitbranch="master"
 pkgrel="1"
 uburel=`lsb_release -rs`

@@ -99,7 +99,7 @@ if [ "X\$VIRTUAL_ENV" = "X" -a -d /root/jvenv ]; then
 fi
 EOF
 
-# install onnxruntime which may be useful for CPU deep nets:
+# install onnxruntime for CPU deep nets:
 pip install onnxruntime
 
 # openai whisper speech to text
@@ -126,11 +126,14 @@ pip install http://jevois.org/pkg/mediapipe-0.10.14-cp312-cp312-linux_aarch64.wh
 pip install http://jevois.org/pkg/tflite_runtime-2.5.0.post1-cp312-cp312-linux_aarch64.whl
 pip install http://jevois.org/pkg/pycoral-2.0.0-cp312-cp312-linux_aarch64.whl
 
+# Khadas KSNN for deep nets on NPU in python (closed source):
+pip install http://jevois.org/pkg/ksnn-1.4-py3-none-any.whl
+
 # Disable hostapd as it pollutes our logs:
 systemctl disable hostapd
 
 # Pre-install Hailo drivers (Note: hailort deb is already installed from jevois.usc.edu):
-hailo="4.17.0"
+hailo="4.19.0"
 # JEVOIS: NEED TO WAIT UNTIL CP312 available...
 # pip install http://jevois.org/pkg/hailort-${hailo}-cp312-cp312-linux_aarch64.whl
 
@@ -171,30 +174,19 @@ ARCH=arm64 dkms add -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms build -k ${KVER} -m 8812au -v 4.2.3
 ARCH=arm64 dkms install -k ${KVER} -m 8812au -v 4.2.3
 
-# Get ollama and a couple models; we need to patch the install script to use aarch64 instead of autodetect:
-wget https://ollama.com/install.sh
-sed -i -e 'x;/./{x;b};x;/ARCH=/h;//a ARCH=arm64' install.sh # force arm64
-sed -i -e "x;/./{x;b};x;/KERN=/h;//a KERN=${KVER}" install.sh # pass correct kernel version
-sed -i -e 'x;/./{x;b};x;/check_gpu/h;//a return 1' install.sh # disable check_gpu() function
-chmod a+x install.sh
-./install.sh
-/bin/rm install.sh
-
+# Install ollama prebuilt for JeVois-Pro, with some models already and no useless nVidia libs that fill up /tmp:
+# Build ollama using jevoispro-sdk/scripts/jevoispro-build-ollama.sh on a running camera
+useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
 usermod -a -G ollama jevois
-systemctl enable ollama
-
 pip install ollama
 
-# this does not seem to download to the correct location... will have to run it manually on a running camera:
-#ollama pull moondream
-#ollama pull tinydolphin
-
-# pull pe-installed models:
-omodels="ollama-models-1.21.0.tbz"
+olla="ollama-models-1.22.0.tbz"
 cd /
-wget http://jevois.org/pkg/${omodels}
-tar jxvf ${omodels}
-/bin/rm -f ${omodels}
+curl -L http://jevois.org/pkg/${olla} | tar jxv
+chown -R ollama:ollama /usr/share/ollama
+
+systemctl daemon-reload
+systemctl enable ollama
 
 # Boot into jevois GUI by default:
 if [ -f /usr/bin/jevoispro.sh ]; then

@@ -3,7 +3,7 @@
 
 make
 
-ver="1.2.0"
+ver="1.3.0"
 pkgrel="1"
 arch=`dpkg --print-architecture`
 
